@@ -65,11 +65,32 @@ To enable JavaScript-rendered webpage fetching via `fetch_webpage` on **macOS**,
 
 ## Goose integration
 
-Add CREPE to Goose by editing `~/.config/goose/config.yaml`:
+You can add `crepe-mcp` as a stdio extension in Goose (`~/.config/goose/config.yaml`) or configure it interactively using `goose configure`.
+
+### Option 1: Run directly from your local clone (Recommended for testing)
+If you cloned the repository locally (e.g. to `~/git/crepe-mcp`), you can tell Goose to execute it directly via `uv run` without installing it globally:
 
 ```yaml
 extensions:
   crepe:
+    name: crepe
+    type: stdio
+    cmd: uv
+    args: ["--directory", "/home/username/git/crepe-mcp", "run", "crepe-mcp"]
+    env_keys:
+      - CREPE_TAVILY_API_KEY
+      - CREPE_HEADLESS_BROWSER_PATH
+      - CREPE_ASPOSE_LICENSE_PATH
+```
+*(Replace `/home/username/git/crepe-mcp` with your actual absolute path to the repository).*
+
+### Option 2: Run as an installed tool (`uv tool install .`)
+If you ran `uv tool install .` inside the project directory (or installed via pip), `crepe-mcp` is on your PATH:
+
+```yaml
+extensions:
+  crepe:
+    name: crepe
     type: stdio
     cmd: crepe-mcp
     args: []
@@ -79,17 +100,31 @@ extensions:
       - CREPE_ASPOSE_LICENSE_PATH
 ```
 
-Or run ephemerally with `uvx` (no install needed):
+### Option 3: Run ephemerally via `uvx` (Once published to PyPI)
+If running directly from PyPI without local installation:
 
 ```yaml
 extensions:
   crepe:
+    name: crepe
     type: stdio
     cmd: uvx
     args: ["crepe-mcp"]
     env_keys:
       - CREPE_TAVILY_API_KEY
+      - CREPE_HEADLESS_BROWSER_PATH
+      - CREPE_ASPOSE_LICENSE_PATH
 ```
+
+### Option 4: Add via Goose CLI (`goose configure`)
+If you prefer Goose's interactive terminal setup instead of editing `config.yaml`:
+1. Run `goose configure` in your terminal.
+2. Select **`Add Extension`** → **`Command-line Extension (stdio)`**.
+3. For **Name**, enter: `crepe`
+4. For **Command**, enter either:
+   - `crepe-mcp` (if installed globally)
+   - OR `uv --directory /path/to/crepe-mcp run crepe-mcp` (for local repo)
+5. Add environment variable keys (`CREPE_TAVILY_API_KEY`, etc.) when prompted.
 
 ## Typical agent workflow
 
