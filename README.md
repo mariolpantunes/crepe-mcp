@@ -65,7 +65,16 @@ To enable JavaScript-rendered webpage fetching via `fetch_webpage` on **macOS**,
 
 ## Goose integration
 
-You can add `crepe-mcp` as a stdio extension in Goose (`~/.config/goose/config.yaml`) or configure it interactively using `goose configure`.
+You can automate this entire configuration using our built-in interactive setup script:
+```bash
+# Auto-detect browsers/keys, export profile variables, and register in ~/.config/goose/config.yaml
+./setup.py --install
+
+# To remove and clean up later:
+./setup.py --uninstall
+```
+
+Alternatively, you can add `crepe-mcp` manually to `~/.config/goose/config.yaml` using one of the options below:
 
 ### Option 1: Run directly from your local clone (Recommended for testing)
 If you cloned the repository locally (e.g. to `~/git/crepe-mcp`), you can tell Goose to execute it directly via `uv run` without installing it globally:
