@@ -52,8 +52,16 @@ All variables are prefixed with `CREPE_` to avoid collisions.
 | Variable | Required | Purpose |
 |----------|----------|---------|
 | `CREPE_TAVILY_API_KEY` | No | Enables `web_search` via Tavily; graceful warning if absent |
-| `CREPE_HEADLESS_BROWSER_PATH` | No | Path to Chromium-compatible browser for `fetch_webpage` (e.g. `/usr/bin/chromium`). Falls back to urllib if unset. |
+| `CREPE_HEADLESS_BROWSER_PATH` | No | Path to Chromium-compatible browser for `fetch_webpage`. See [macOS Browser Paths](#macos--headless-browser-setup) below. Falls back to urllib if unset. |
 | `CREPE_ASPOSE_LICENSE_PATH` | No | Path to Aspose `.lic` file for watermark-free PPTX→PNG export. Evaluation mode (with watermarks) is used if unset. |
+
+### macOS & Headless Browser Setup
+To enable JavaScript-rendered webpage fetching via `fetch_webpage` on **macOS**, set `CREPE_HEADLESS_BROWSER_PATH` to any Chromium-based browser application path:
+- **Google Chrome**: `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`
+- **Brave Browser**: `/Applications/Brave Browser.app/Contents/MacOS/Brave Browser`
+- **Microsoft Edge**: `/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge`
+
+> **Note on Safari:** Apple's native **Safari (`safaridriver`) does not support CLI `--headless` mode** for DOM dumping (`--dump-dom`). If you only have Safari installed or choose not to set `CREPE_HEADLESS_BROWSER_PATH`, `fetch_webpage` automatically falls back to pure Python `urllib` + HTML stripping, which works instantaneously for all static articles, documentation, and Wikipedia pages.
 
 ## Goose integration
 
@@ -111,7 +119,7 @@ render_slides_as_pngs(id, format="pptx")  # validate PPTX layout
 | Code | ` ```python\ncode\n``` ` |
 | Image | `![caption](/path/to/image.png)` |
 | Speaker notes | `::: notes\ntext\n:::` |
-| Two-column layout | pandoc fenced-div (see docs) |
+| Two-column layout | `:::: {.columns}\n::: {.column width="50%"}\nLeft\n:::\n::: {.column width="50%"}\nRight\n:::\n::::` |
 
 ## License
 
