@@ -1,0 +1,29 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "crepe-mcp"
+version = "0.1.0"
+description = "CREPE — Compile, Research, Export, Presentation Engine. An MCP server for building, compiling and validating presentations from Markdown, plus research utilities."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+keywords = ["mcp", "presentation", "pandoc", "beamer", "pptx", "research"]
+dependencies = [
+    "fastmcp>=2.0",
+    "pyyaml>=6.0",
+    "requests>=2.31",
+    "beautifulsoup4>=4.12",
+    "pymupdf>=1.24",
+    "aspose-slides>=24.0",
+]
+
+[project.scripts]
+crepe-mcp = "crepe_mcp.server:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/crepe_mcp"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/", "README.md", "pyproject.toml"]
