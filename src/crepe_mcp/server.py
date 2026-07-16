@@ -1,6 +1,6 @@
 """CREPE — Compile, Research, Export, Presentation Engine.
 
-FastMCP server exposing 11 tools across two groups:
+FastMCP server exposing 12 tools across two groups:
 
 GROUP A — Stateful presentation builder
   1.  create_presentation
@@ -9,13 +9,14 @@ GROUP A — Stateful presentation builder
   4.  set_slide
   5.  compile_presentation
   6.  render_slides_as_pngs
+  7.  cleanup_presentation
 
 GROUP B — Research & web utilities
-  7.  academic_search
-  8.  web_search
-  9.  wikipedia_search
-  10. wikipedia_read
-  11. fetch_webpage
+  8.  academic_search
+  9.  web_search
+  10. wikipedia_search
+  11. wikipedia_read
+  12. fetch_webpage
 
 Environment variables (all CREPE_ prefixed):
   CREPE_TAVILY_API_KEY        — Tavily API key for web_search
@@ -34,6 +35,7 @@ from crepe_mcp.exporter import render_pdf_to_pngs, render_pptx_to_pngs
 from crepe_mcp.renderer import build_slides_markdown
 from crepe_mcp import research
 from crepe_mcp.store import (
+    delete_presentation as _delete_pres,
     get_presentation as _get_pres,
     get_slide_by_index as _get_slide,
     new_presentation,
@@ -160,10 +162,10 @@ def set_slide(
     """
     try:
         pres = _get_pres(presentation_id)
+        slide, action = upsert_slide(pres, index, title, content)
     except ValueError as exc:
         return {"success": False, "error": str(exc)}
 
-    slide, action = upsert_slide(pres, index, title, content)
     actual_index = pres.slides.index(slide)
     return {
         "success": True,
@@ -201,6 +203,8 @@ def compile_presentation(
     """
     if format not in ("pdf", "pptx"):
         return {"success": False, "error": f"format must be 'pdf' or 'pptx', got {format!r}"}
+    if not os.path.isabs(output_path):
+        return {"success": False, "error": f"output_path must be an absolute path, got {output_path!r}"}
     try:
         pres = _get_pres(presentation_id)
     except ValueError as exc:
@@ -246,7 +250,9 @@ def render_slides_as_pngs(
     dpi        : Render resolution (default 150).
 
     PDF  path : pymupdf — pure Python, no system deps.
-    PPTX path : aspose-slides — set CREPE_ASPOSE_LICENSE_PATH for watermark-free output.
+    PPTX path : LibreOffice headless where available (required on Linux, no
+                fallback); otherwise aspose-slides — set CREPE_ASPOSE_LICENSE_PATH
+                for watermark-free output on that fallback path.
     """
     if format not in ("pdf", "pptx"):
         return {"success": False, "error": f"format must be 'pdf' or 'pptx', got {format!r}"}
@@ -274,8 +280,9 @@ def render_slides_as_pngs(
         if format == "pdf":
             png_files = render_pdf_to_pngs(artifact_path, output_dir, dpi=dpi)
             warning = None
+            converter = "pymupdf"
         else:
-            png_files, warning = render_pptx_to_pngs(artifact_path, output_dir, dpi=dpi)
+            png_files, warning, converter = render_pptx_to_pngs(artifact_path, output_dir, dpi=dpi)
     except ImportError as exc:
         return {"success": False, "error": str(exc)}
     except Exception as exc:
@@ -289,11 +296,26 @@ def render_slides_as_pngs(
         "png_files": png_files,
         "page_count": len(png_files),
         "dpi": dpi,
-        "converter": "pymupdf" if format == "pdf" else "aspose-slides",
+        "converter": converter,
     }
     if warning:
         result["warning"] = warning
     return result
+
+
+@mcp.tool
+def cleanup_presentation(presentation_id: str) -> dict:
+    """Delete a presentation's in-memory state and its on-disk scratch directory.
+
+    Call this once a deck's compiled artifacts (PDF/PPTX/PNGs) have been
+    delivered to the user — the server keeps every presentation's workdir on
+    disk until this is called or the process exits.
+    """
+    try:
+        _delete_pres(presentation_id)
+    except ValueError as exc:
+        return {"success": False, "error": str(exc)}
+    return {"success": True, "presentation_id": presentation_id}
 
 
 # ===========================================================================

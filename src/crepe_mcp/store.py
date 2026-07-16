@@ -11,6 +11,8 @@ callers embed pandoc column markup directly in the slide content string.
 """
 from __future__ import annotations
 
+import atexit
+import shutil
 import tempfile
 import uuid
 from dataclasses import dataclass, field
@@ -77,6 +79,22 @@ def get_presentation(presentation_id: str) -> Presentation:
     return presentation
 
 
+def delete_presentation(presentation_id: str) -> None:
+    """Drop a presentation from memory and remove its on-disk workdir."""
+    presentation = PRESENTATIONS.pop(presentation_id, None)
+    if presentation is None:
+        raise ValueError(f"Unknown presentation_id: {presentation_id!r}")
+    shutil.rmtree(presentation.workdir, ignore_errors=True)
+
+
+def _cleanup_all_workdirs() -> None:
+    for presentation in PRESENTATIONS.values():
+        shutil.rmtree(presentation.workdir, ignore_errors=True)
+
+
+atexit.register(_cleanup_all_workdirs)
+
+
 # ---------------------------------------------------------------------------
 # Slide helpers
 # ---------------------------------------------------------------------------
@@ -94,6 +112,8 @@ def upsert_slide(
 
     Returns (slide, action) where action is 'replaced' or 'appended'.
     """
+    if index < 0:
+        raise ValueError(f"Slide index must be >= 0, got {index}")
     slide = Slide(id=uuid.uuid4().hex[:8], title=title, content=content)
     if index < len(presentation.slides):
         slide.id = presentation.slides[index].id

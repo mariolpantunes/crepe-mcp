@@ -5,7 +5,7 @@ agent into a capable slide author: draft decks in Pandoc Markdown, compile to
 Beamer PDF or PowerPoint, validate visually with PNG exports, and pull in
 research from the web, Wikipedia and Semantic Scholar.
 
-## Tools (11 total)
+## Tools (12 total)
 
 ### Presentation (stateful)
 | Tool | Purpose |
@@ -16,6 +16,7 @@ research from the web, Wikipedia and Semantic Scholar.
 | `set_slide` | Add or replace a slide (index < len → replace, else append) |
 | `compile_presentation` | Compile to PDF (Beamer/lualatex) or PPTX (pandoc) |
 | `render_slides_as_pngs` | Render compiled artifact to PNG sequence for validation |
+| `cleanup_presentation` | Delete a presentation's in-memory state and on-disk scratch dir |
 
 ### Research & utilities
 | Tool | Purpose |
@@ -33,7 +34,7 @@ research from the web, Wikipedia and Semantic Scholar.
 uv tool install crepe-mcp
 
 # From source
-git clone https://github.com/yourname/crepe-mcp
+git clone https://github.com/mariolpantunes/crepe-mcp
 cd crepe-mcp
 uv tool install .
 ```
@@ -42,8 +43,21 @@ uv tool install .
 
 - **pandoc** — slide compilation
 - **lualatex** — PDF/Beamer output (`texlive-full` or MacTeX)
-- **aspose-slides** — PPTX→PNG rendering (installed via pip, no system dep)
 - **pymupdf** — PDF→PNG rendering (installed via pip, no system dep)
+- **PPTX→PNG rendering** — platform-dependent:
+  - **Linux**: **LibreOffice is required** (native `soffice`/`libreoffice` on
+    PATH, or installed as a Flatpak — `flatpak install flathub
+    org.libreoffice.LibreOffice`, auto-detected at runtime, no config needed).
+    There is no fallback on Linux: aspose-slides' embedded .NET runtime
+    dynamically loads `libssl.so.1.1`, which distros that ship only OpenSSL 3
+    (Slackware, recent Arch, etc.) no longer have, and no newer aspose-slides
+    release has moved off it. Without LibreOffice, `render_slides_as_pngs`
+    (`format="pptx"`) returns a clean error instead of a crash.
+  - **macOS** (and other platforms): LibreOffice is preferred if found (native
+    binary or `/Applications/LibreOffice.app`); otherwise falls back to
+    **aspose-slides** (installed via pip — no OpenSSL 1.1 issue on macOS).
+    Aspose is a commercial library; without `CREPE_ASPOSE_LICENSE_PATH` it
+    runs in evaluation mode and watermarks output PNGs.
 
 ## Environment variables
 
@@ -53,7 +67,8 @@ All variables are prefixed with `CREPE_` to avoid collisions.
 |----------|----------|---------|
 | `CREPE_TAVILY_API_KEY` | No | Enables `web_search` via Tavily; graceful warning if absent |
 | `CREPE_HEADLESS_BROWSER_PATH` | No | Path to Chromium-compatible browser for `fetch_webpage`. See [macOS Browser Paths](#macos--headless-browser-setup) below. Falls back to urllib if unset. |
-| `CREPE_ASPOSE_LICENSE_PATH` | No | Path to Aspose `.lic` file for watermark-free PPTX→PNG export. Evaluation mode (with watermarks) is used if unset. |
+| `CREPE_LIBREOFFICE_PATH` | No | Path to a `soffice`/`libreoffice` executable, overriding auto-detection. Required on Linux only if auto-detection (PATH, Flatpak) fails. |
+| `CREPE_ASPOSE_LICENSE_PATH` | No | Path to Aspose `.lic` file for watermark-free PPTX→PNG export on the aspose fallback path (macOS/other, when LibreOffice isn't found). Evaluation mode (with watermarks) is used if unset. |
 
 ### macOS & Headless Browser Setup
 To enable JavaScript-rendered webpage fetching via `fetch_webpage` on **macOS**, set `CREPE_HEADLESS_BROWSER_PATH` to any Chromium-based browser application path:
@@ -90,6 +105,7 @@ extensions:
       - CREPE_TAVILY_API_KEY
       - CREPE_HEADLESS_BROWSER_PATH
       - CREPE_ASPOSE_LICENSE_PATH
+      - CREPE_LIBREOFFICE_PATH
 ```
 *(Replace `/home/username/git/crepe-mcp` with your actual absolute path to the repository).*
 
@@ -107,6 +123,7 @@ extensions:
       - CREPE_TAVILY_API_KEY
       - CREPE_HEADLESS_BROWSER_PATH
       - CREPE_ASPOSE_LICENSE_PATH
+      - CREPE_LIBREOFFICE_PATH
 ```
 
 ### Option 3: Run ephemerally via `uvx` (Once published to PyPI)
@@ -123,6 +140,7 @@ extensions:
       - CREPE_TAVILY_API_KEY
       - CREPE_HEADLESS_BROWSER_PATH
       - CREPE_ASPOSE_LICENSE_PATH
+      - CREPE_LIBREOFFICE_PATH
 ```
 
 ### Option 4: Add via Goose CLI (`goose configure`)

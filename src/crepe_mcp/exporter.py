@@ -2,10 +2,16 @@
 for visual validation by the agent.
 
 PDF  → PNG  uses pymupdf  (pure Python, pip install pymupdf).
-PPTX → PNG  uses aspose-slides (pip install aspose-slides).
+PPTX → PNG  prefers LibreOffice headless (PPTX -> PDF -> pymupdf), falling
+             back to aspose-slides where LibreOffice isn't available.
+             On Linux, LibreOffice is required with no fallback: its
+             embedded .NET runtime needs libssl.so.1.1, which distros that
+             ship only OpenSSL 3 (Slackware, recent Arch, etc.) don't have.
 
 Environment variables (all prefixed CREPE_):
-  CREPE_ASPOSE_LICENSE_PATH — path to an Aspose .lic file.
+  CREPE_LIBREOFFICE_PATH    — path to a LibreOffice/soffice executable.
+      Overrides auto-detection (PATH, macOS app bundle, Flatpak on Linux).
+  CREPE_ASPOSE_LICENSE_PATH — path to an Aspose .lic file (fallback path only).
       Without it, aspose-slides runs in evaluation mode and adds watermark
       overlays to output PNGs. Acceptable for layout validation; set the
       variable to suppress watermarks for final delivery.
@@ -13,52 +19,76 @@ Environment variables (all prefixed CREPE_):
 from __future__ import annotations
 
 import os
+import shutil
+import subprocess
+import sys
 from pathlib import Path
 from typing import Optional
 
-import sys
 
-def _ensure_linux_dotnet_compat() -> None:
-    """Ensure embedded .NET Core runtime in aspose-slides has required ICU and OpenSSL 1.1 compat on Linux."""
-    if not sys.platform.startswith("linux"):
-        return
-    os.environ.setdefault("DOTNET_SYSTEM_GLOBALIZATION_INVARIANT", "1")
-    # If libssl.so.1.1 is already in standard paths, no override needed
-    import ctypes
-    import ctypes.util
-    if ctypes.util.find_library("ssl") and "1.1" in (ctypes.util.find_library("ssl") or ""):
-        return
-    candidate_dirs = [
-        "/usr/lib64", "/usr/lib", "/lib64", "/lib",
-        "/usr/local/lib", "/opt/lib",
-        "/usr/lib/x86_64-linux-gnu", "/lib/x86_64-linux-gnu",
-        os.path.expanduser("~/.var/app/com.valvesoftware.Steam/.local/share/Steam/steamapps/common/SteamLinuxRuntime_sniper/sniper_platform_3.0.20260608.242788/files/lib/x86_64-linux-gnu"),
-        os.path.expanduser("~/.local/share/Steam/steamapps/common/SteamLinuxRuntime_sniper/sniper_platform_3.0.20260608.242788/files/lib/x86_64-linux-gnu"),
-        os.path.expanduser("~/anaconda3/lib"),
-        os.path.expanduser("~/miniconda3/lib"),
-    ]
-    import glob
+def _find_libreoffice() -> Optional[list[str]]:
+    """Return the command prefix to invoke LibreOffice headless, or None.
+
+    Checks (in order): CREPE_LIBREOFFICE_PATH override, `soffice`/`libreoffice`
+    on PATH, the macOS app bundle, and — Linux only — a Flatpak install of
+    org.libreoffice.LibreOffice. Mirrors setup.py's find_headless_browser().
+    """
+    override = os.environ.get("CREPE_LIBREOFFICE_PATH", "").strip()
+    if override and os.path.isfile(override):
+        return [override]
+
+    for binary in ("soffice", "libreoffice"):
+        found = shutil.which(binary)
+        if found:
+            return [found]
+
+    macos_path = "/Applications/LibreOffice.app/Contents/MacOS/soffice"
+    if os.path.isfile(macos_path) and os.access(macos_path, os.X_OK):
+        return [macos_path]
+
+    if sys.platform.startswith("linux") and shutil.which("flatpak"):
+        try:
+            result = subprocess.run(
+                ["flatpak", "info", "org.libreoffice.LibreOffice"],
+                capture_output=True, timeout=10,
+            )
+            if result.returncode == 0:
+                # Flatpak gives every app a private tmpfs for /tmp regardless of
+                # --filesystem=host (host does not imply /tmp) -- both flags are
+                # needed since presentation workdirs live under the system tempdir
+                # but output_path/output_dir can point anywhere on the host.
+                return [
+                    "flatpak", "run", "--filesystem=host", "--filesystem=/tmp",
+                    "org.libreoffice.LibreOffice",
+                ]
+        except Exception:
+            pass
+
+    return None
+
+
+def _render_pptx_via_libreoffice(
+    cmd_prefix: list[str],
+    pptx_path: str,
+    output_dir: str,
+    dpi: int,
+    timeout: int = 120,
+) -> list[str]:
+    """Convert PPTX -> PDF via LibreOffice headless, then rasterize with pymupdf."""
+    cmd = cmd_prefix + ["--headless", "--convert-to", "pdf", "--outdir", output_dir, pptx_path]
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    if result.returncode != 0:
+        raise RuntimeError(f"LibreOffice failed to convert PPTX to PDF:\n{result.stderr.strip()}")
+
+    base = os.path.splitext(os.path.basename(pptx_path))[0]
+    pdf_path = os.path.join(output_dir, base + ".pdf")
+    if not os.path.isfile(pdf_path):
+        raise RuntimeError(f"LibreOffice did not produce the expected PDF: {pdf_path!r}")
+
     try:
-        candidate_dirs.extend(glob.glob(os.path.expanduser("~/.var/app/*/files/lib/*-linux-gnu")))
-        candidate_dirs.extend(glob.glob("/usr/lib/*-linux-gnu"))
-    except Exception:
-        pass
-
-    for d in candidate_dirs:
-        ssl_p = os.path.join(d, "libssl.so.1.1")
-        crypto_p = os.path.join(d, "libcrypto.so.1.1")
-        if os.path.isfile(ssl_p) and os.path.isfile(crypto_p):
-            try:
-                ctypes.CDLL(crypto_p, mode=ctypes.RTLD_GLOBAL)
-                ctypes.CDLL(ssl_p, mode=ctypes.RTLD_GLOBAL)
-                ld_path = os.environ.get("LD_LIBRARY_PATH", "")
-                if d not in ld_path.split(":"):
-                    os.environ["LD_LIBRARY_PATH"] = f"{d}:{ld_path}" if ld_path else d
-                break
-            except Exception:
-                continue
-
-_ensure_linux_dotnet_compat()
+        return render_pdf_to_pngs(pdf_path, output_dir, dpi=dpi)
+    finally:
+        os.remove(pdf_path)
 
 
 def _apply_aspose_license() -> bool:
@@ -103,7 +133,7 @@ def render_pdf_to_pngs(
     return png_files
 
 
-def render_pptx_to_pngs(
+def _render_pptx_via_aspose(
     pptx_path: str,
     output_dir: str,
     dpi: int = 150,
@@ -146,3 +176,38 @@ def render_pptx_to_pngs(
                     image.dispose()
             png_files.append(out_path)
     return png_files, warning
+
+
+def render_pptx_to_pngs(
+    pptx_path: str,
+    output_dir: str,
+    dpi: int = 150,
+) -> tuple[list[str], Optional[str], str]:
+    """Render every slide of a PPTX to a numbered PNG sequence.
+
+    Prefers LibreOffice headless (PPTX -> PDF -> pymupdf), falling back to
+    aspose-slides where LibreOffice isn't available. On Linux, LibreOffice is
+    required with no fallback — see the module docstring for why.
+
+    Returns (png_files, warning, converter). warning is only ever set on the
+    aspose-slides fallback path (evaluation-mode watermark notice).
+    """
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
+    cmd = _find_libreoffice()
+
+    if sys.platform.startswith("linux"):
+        if cmd is None:
+            raise ImportError(
+                "LibreOffice is required to render PPTX slides on Linux (install via "
+                "your package manager, e.g. libreoffice-impress, or "
+                "`flatpak install flathub org.libreoffice.LibreOffice`)."
+            )
+        png_files = _render_pptx_via_libreoffice(cmd, pptx_path, output_dir, dpi)
+        return png_files, None, "libreoffice"
+
+    if cmd is not None:
+        png_files = _render_pptx_via_libreoffice(cmd, pptx_path, output_dir, dpi)
+        return png_files, None, "libreoffice"
+
+    png_files, warning = _render_pptx_via_aspose(pptx_path, output_dir, dpi)
+    return png_files, warning, "aspose-slides"

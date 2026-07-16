@@ -79,7 +79,8 @@ def compile_to_pptx(
     if reference_doc and not os.path.isfile(reference_doc):
         raise CompileError(f"reference_doc not found: {reference_doc!r}")
 
-    # For PPTX, skip Beamer-specific keys in config (theme, header-includes).
+    # build_config_yaml always emits Beamer-specific keys (theme, header-includes)
+    # regardless of target; pandoc simply ignores the ones it doesn't use for PPTX.
     config_path, slides_path = _write_sources(presentation)
     cmd = [
         PANDOC, "-s",

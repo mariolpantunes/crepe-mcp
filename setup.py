@@ -9,6 +9,7 @@ profile (`~/.bashrc` / `~/.zshrc`), and updates `~/.config/goose/config.yaml`.
 from __future__ import annotations
 
 import argparse
+import getpass
 import os
 import re
 import shutil
@@ -76,15 +77,33 @@ def find_headless_browser() -> Optional[str]:
     return None
 
 
+def find_libreoffice() -> Optional[str]:
+    """Auto-detect a native `soffice`/`libreoffice` binary, or the macOS app bundle.
+
+    Flatpak installs are auto-detected at runtime by the server itself and
+    don't need CREPE_LIBREOFFICE_PATH set, so they're not probed here.
+    """
+    for binary in ("soffice", "libreoffice"):
+        found = shutil.which(binary)
+        if found:
+            return found
+
+    macos_path = "/Applications/LibreOffice.app/Contents/MacOS/soffice"
+    if os.path.isfile(macos_path) and os.access(macos_path, os.X_OK):
+        return macos_path
+    return None
+
+
 def update_shell_profile(
     profile_path: Path,
     tavily_key: str,
     browser_path: str,
     aspose_license: str,
+    libreoffice_path: str = "",
 ) -> None:
     """Insert or update exported CREPE variables in the user's shell profile."""
     content = profile_path.read_text("utf-8") if profile_path.exists() else ""
-    
+
     # Remove existing block if present
     pattern = re.compile(
         re.escape(PROFILE_BLOCK_START) + r".*?" + re.escape(PROFILE_BLOCK_END) + r"\n?",
@@ -99,6 +118,8 @@ def update_shell_profile(
         lines.append(f'export CREPE_HEADLESS_BROWSER_PATH="{browser_path}"')
     if aspose_license:
         lines.append(f'export CREPE_ASPOSE_LICENSE_PATH="{aspose_license}"')
+    if libreoffice_path:
+        lines.append(f'export CREPE_LIBREOFFICE_PATH="{libreoffice_path}"')
     lines.append(PROFILE_BLOCK_END)
 
     block_str = "\n".join(lines) + "\n"
@@ -149,6 +170,7 @@ def update_goose_config() -> None:
             "CREPE_TAVILY_API_KEY",
             "CREPE_HEADLESS_BROWSER_PATH",
             "CREPE_ASPOSE_LICENSE_PATH",
+            "CREPE_LIBREOFFICE_PATH",
         ],
     }
 
@@ -186,6 +208,15 @@ def interactive_prompt(prompt_text: str, default_val: str = "") -> str:
         sys.exit(1)
 
 
+def interactive_prompt_secret(prompt_text: str) -> str:
+    """Ask user for sensitive input (e.g. API keys) without echoing it to the terminal."""
+    try:
+        return getpass.getpass(f"{prompt_text}: ").strip()
+    except (KeyboardInterrupt, EOFError):
+        print("\nInstallation aborted by user.")
+        sys.exit(1)
+
+
 def run_install(args: argparse.Namespace) -> None:
     print(f"🚀 Installing CREPE MCP Server (`Option 1: Local Development` at {SCRIPT_DIR})...\n")
 
@@ -194,6 +225,11 @@ def run_install(args: argparse.Namespace) -> None:
         print("⚠️ Warning: `uv` was not found on PATH. Please install uv from https://docs.astral.sh/uv/.")
     if not shutil.which("pandoc"):
         print("⚠️ Warning: `pandoc` was not found on PATH. Required for PDF/PPTX compilation.")
+    if not shutil.which("lualatex"):
+        print(
+            "⚠️ Warning: `lualatex` was not found on PATH. Required for PDF/Beamer output "
+            "(install via MacTeX/BasicTeX on macOS or texlive-full on Linux)."
+        )
 
     # 2. Resolve Headless Browser Path
     browser_path = args.browser_path or os.environ.get("CREPE_HEADLESS_BROWSER_PATH", "").strip()
@@ -218,26 +254,48 @@ def run_install(args: argparse.Namespace) -> None:
     # 3. Resolve Tavily API Key
     tavily_key = args.tavily_key or os.environ.get("CREPE_TAVILY_API_KEY", os.environ.get("TAVILY_API_KEY", "")).strip()
     if not tavily_key and not args.non_interactive:
-        tavily_key = interactive_prompt(
+        tavily_key = interactive_prompt_secret(
             "Enter your Tavily API key for web search (or press Enter to skip)"
         )
     if not tavily_key:
         print("ℹ️ No Tavily API key set. `web_search` will return a friendly warning when invoked.")
 
-    # 4. Resolve Aspose License Path
+    # 4. Resolve Aspose License Path (fallback PPTX renderer, when LibreOffice isn't available)
     aspose_lic = args.aspose_license or os.environ.get("CREPE_ASPOSE_LICENSE_PATH", "").strip()
     if not aspose_lic and not args.non_interactive:
         aspose_lic = interactive_prompt(
-            "Enter Aspose .lic file path for watermark-free PowerPoint export (or press Enter to skip)"
+            "Enter Aspose .lic file path for watermark-free PowerPoint export fallback (or press Enter to skip)"
         )
     if not aspose_lic:
-        print("ℹ️ Note: Using Aspose evaluation mode. Output PNGs will contain watermarks unless a valid .lic file path is set later.")
+        print("ℹ️ Note: Aspose fallback (if ever used) runs in evaluation mode and watermarks output unless a valid .lic file path is set later.")
 
-    # 5. Export variables to shell profile
+    # 5. Resolve LibreOffice Path (preferred PPTX->PNG renderer; required on Linux)
+    libreoffice_path = args.libreoffice_path or os.environ.get("CREPE_LIBREOFFICE_PATH", "").strip()
+    if not libreoffice_path:
+        detected_lo = find_libreoffice()
+        if detected_lo:
+            print(f"🔍 Auto-detected LibreOffice: {detected_lo}")
+            if not args.non_interactive:
+                libreoffice_path = interactive_prompt("Confirm or override LibreOffice path", detected_lo)
+            else:
+                libreoffice_path = detected_lo
+        else:
+            print(
+                "ℹ️ No native LibreOffice binary found. If it's installed as a Flatpak "
+                "(org.libreoffice.LibreOffice), no action needed — it's auto-detected at "
+                "runtime. Otherwise install LibreOffice, or leave unset to fall back to "
+                "aspose-slides (macOS only; required and unavailable on Linux without it)."
+            )
+            if not args.non_interactive:
+                libreoffice_path = interactive_prompt(
+                    "Enter absolute path to your soffice/libreoffice executable (or press Enter to skip)"
+                )
+
+    # 6. Export variables to shell profile
     profile_path = detect_shell_profile()
-    update_shell_profile(profile_path, tavily_key, browser_path, aspose_lic)
+    update_shell_profile(profile_path, tavily_key, browser_path, aspose_lic, libreoffice_path)
 
-    # 6. Update ~/.config/goose/config.yaml
+    # 7. Update ~/.config/goose/config.yaml
     update_goose_config()
 
     print("\n🎉 CREPE MCP server installation completed successfully!")
@@ -291,6 +349,12 @@ def main() -> None:
         type=str,
         default="",
         help="Path to Aspose `.lic` file (`CREPE_ASPOSE_LICENSE_PATH`).",
+    )
+    parser.add_argument(
+        "--libreoffice-path",
+        type=str,
+        default="",
+        help="Path to soffice/libreoffice executable (`CREPE_LIBREOFFICE_PATH`).",
     )
 
     args = parser.parse_args()

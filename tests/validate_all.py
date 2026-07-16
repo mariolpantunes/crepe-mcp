@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Comprehensive end-to-end validation test harness for the CREPE MCP server.
 
-Runs all 11 tools across Group A (Stateful Presentation Builder) and Group B
+Runs all 12 tools across Group A (Stateful Presentation Builder) and Group B
 (Research & Web Utilities), asserting expected structure, error/warning handling,
 and physical file creation (.pdf, .pptx, and .png sequences).
 """
@@ -61,6 +61,7 @@ def main() -> None:
     )
     pres_id = res_create.get("presentation_id")
     print_check("create_presentation returns presentation_id", bool(pres_id), f"presentation_id={pres_id}")
+    assert pres_id is not None
     print_check("create_presentation metadata title", res_create.get("metadata", {}).get("title") == "Validation Suite Deck")
 
     # 2. set_slide (appends)
@@ -197,10 +198,10 @@ def main() -> None:
         f"PPTX size: {os.path.getsize(pptx_output)} bytes",
     )
 
-    # 8. render_slides_as_pngs (PPTX -> PNG via aspose-slides)
+    # 8. render_slides_as_pngs (PPTX -> PNG via LibreOffice, or aspose-slides fallback)
     pptx_png_dir = f"/tmp/crepe_val_{pres_id}_pptx_slides"
     print(f"\nRendering PPTX slides as PNGs to {pptx_png_dir}...")
-    # Make sure ASPOSE license is not set to verify warning return
+    # Make sure ASPOSE license is not set to verify warning return on the aspose fallback path
     os.environ.pop("CREPE_ASPOSE_LICENSE_PATH", None)
     res_pptx_png = call_tool(
         server.render_slides_as_pngs,
@@ -211,24 +212,33 @@ def main() -> None:
     )
     pptx_png_files = res_pptx_png.get("png_files", [])
     if res_pptx_png.get("success") is True:
+        converter = res_pptx_png.get("converter")
         print_check(
-            "render_slides_as_pngs format=pptx (aspose-slides)",
-            res_pptx_png.get("converter") == "aspose-slides"
+            "render_slides_as_pngs format=pptx (libreoffice or aspose-slides)",
+            converter in ("libreoffice", "aspose-slides")
             and len(pptx_png_files) >= 3
             and all(os.path.isfile(p) and os.path.getsize(p) > 0 for p in pptx_png_files),
-            f"Generated {len(pptx_png_files)} PNGs",
+            f"Generated {len(pptx_png_files)} PNGs via {converter}",
         )
-        print_check(
-            "Aspose evaluation warning returned when CREPE_ASPOSE_LICENSE_PATH is unset",
-            "Aspose is running in evaluation mode" in res_pptx_png.get("warning", ""),
-            f"warning='{res_pptx_png.get('warning')}'",
-        )
+        if converter == "aspose-slides":
+            print_check(
+                "Aspose evaluation warning returned when CREPE_ASPOSE_LICENSE_PATH is unset",
+                "Aspose is running in evaluation mode" in res_pptx_png.get("warning", ""),
+                f"warning='{res_pptx_png.get('warning')}'",
+            )
+        else:
+            print_check(
+                "LibreOffice path returns no evaluation/watermark warning",
+                res_pptx_png.get("warning") is None,
+                f"warning={res_pptx_png.get('warning')!r}",
+            )
     else:
         err_msg = res_pptx_png.get("error", "")
         print_check(
-            "render_slides_as_pngs format=pptx cleanly caught missing libgdiplus on minimal Linux",
-            any(w in err_msg for w in ("libgdiplus", "Gdip", "gdiplus")),
-            f"Clean error returned: {err_msg[:120]}...",
+            "render_slides_as_pngs format=pptx cleanly reports missing LibreOffice on Linux "
+            "instead of crashing the process (no aspose fallback on Linux by design)",
+            "LibreOffice is required" in err_msg,
+            f"Clean error returned: {err_msg[:160]}...",
         )
 
     # Cleanup temp files
@@ -239,9 +249,25 @@ def main() -> None:
     if os.path.isfile(pptx_output):
         os.remove(pptx_output)
 
+    # 9. cleanup_presentation
+    print("\nCleaning up presentation workdir...")
+    workdir = server._get_pres(pres_id).workdir
+    res_cleanup = call_tool(server.cleanup_presentation, presentation_id=pres_id)
+    print_check(
+        "cleanup_presentation removes presentation and its workdir",
+        res_cleanup.get("success") is True and not os.path.isdir(workdir),
+        f"workdir removed: {not os.path.isdir(workdir)}",
+    )
+    res_cleanup_again = call_tool(server.cleanup_presentation, presentation_id=pres_id)
+    print_check(
+        "cleanup_presentation on an unknown presentation_id returns a clean error",
+        res_cleanup_again.get("success") is False and "Unknown presentation_id" in res_cleanup_again.get("error", ""),
+        f"error='{res_cleanup_again.get('error')}'",
+    )
+
     print_section("STAGE 3: GROUP B (RESEARCH & WEB UTILITIES)")
 
-    # 9. web_search (Graceful warning check without key)
+    # 10. web_search (Graceful warning check without key)
     print("Testing web_search without CREPE_TAVILY_API_KEY...")
     os.environ.pop("CREPE_TAVILY_API_KEY", None)
     res_web = call_tool(server.web_search, query="MCP protocol updates")
@@ -251,7 +277,7 @@ def main() -> None:
         f"warning='{res_web.get('warning')}'",
     )
 
-    # 10. wikipedia_search & wikipedia_read
+    # 11. wikipedia_search & wikipedia_read
     print("\nTesting wikipedia_search & wikipedia_read...")
     res_wiki_s = call_tool(server.wikipedia_search, query="Pandoc", limit=2)
     wiki_results = res_wiki_s.get("results", [])
@@ -269,7 +295,7 @@ def main() -> None:
         f"Extracted {len(res_wiki_r.get('content', ''))} chars for '{wiki_title}'",
     )
 
-    # 11. academic_search
+    # 12. academic_search
     print("\nTesting academic_search (Semantic Scholar)...")
     res_acad = call_tool(server.academic_search, query="agentic coding large language models", limit=2)
     papers = res_acad.get("papers", [])
@@ -280,7 +306,7 @@ def main() -> None:
         f"Papers retrieved: {len(papers)} | error: '{res_acad.get('error', '')}'",
     )
 
-    # 12. fetch_webpage (urllib fallback check)
+    # 13. fetch_webpage (urllib fallback check)
     print("\nTesting fetch_webpage (urllib fallback mode)...")
     os.environ.pop("CREPE_HEADLESS_BROWSER_PATH", None)
     res_fetch = call_tool(server.fetch_webpage, url="https://example.com", max_chars=1000)
@@ -290,7 +316,7 @@ def main() -> None:
         f"Extracted content length: {len(res_fetch.get('content', ''))} | warning present: {bool(res_fetch.get('warning'))}",
     )
 
-    print_section("ALL 11 TOOLS SUCCESSFULLY VALIDATED!")
+    print_section("ALL 12 TOOLS SUCCESSFULLY VALIDATED!")
 
 
 if __name__ == "__main__":

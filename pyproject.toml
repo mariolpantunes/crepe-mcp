@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "crepe-mcp"
 version = "0.1.0"
-description = "CREPE — Compile, Research, Export, Presentation Engine. An MCP server for building, compiling and validating presentations from Markdown, plus research utilities."
+description = "CREPE — Compile, Research, Export, Presentation Engine. An MCP server for AI Agents that drafts slide decks in Pandoc Markdown, compiles them to Beamer PDF or PowerPoint, renders PNGs for visual validation, and pulls research from Semantic Scholar, the web, and Wikipedia."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
@@ -13,11 +13,13 @@ keywords = ["mcp", "presentation", "pandoc", "beamer", "pptx", "research"]
 dependencies = [
     "fastmcp>=2.0",
     "pyyaml>=6.0",
-    "requests>=2.31",
-    "beautifulsoup4>=4.12",
     "pymupdf>=1.24",
     "aspose-slides>=24.0",
 ]
+
+[project.urls]
+Repository = "https://github.com/mariolpantunes/crepe-mcp"
+Issues = "https://github.com/mariolpantunes/crepe-mcp/issues"
 
 [project.scripts]
 crepe-mcp = "crepe_mcp.server:main"
