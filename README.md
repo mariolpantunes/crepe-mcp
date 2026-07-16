@@ -89,7 +89,15 @@ You can automate this entire configuration using our built-in interactive setup 
 ./setup.py --uninstall
 ```
 
-Alternatively, you can add `crepe-mcp` manually to `~/.config/goose/config.yaml` using one of the options below:
+Alternatively, you can add `crepe-mcp` manually to `~/.config/goose/config.yaml` using one of the options below.
+
+**Use `envs` (literal values), not `env_keys`.** Goose resolves every `env_keys`
+entry against its own keyring/secrets store — it does *not* fall back to a
+plain shell environment variable of the same name. All of CREPE's env vars are
+optional, and declaring one under `env_keys` without a matching Goose secret
+makes the whole extension fail to start with `Failed to fetch secret ... not
+found`. Only fill in the values you actually need (all are optional; omit any
+you don't use):
 
 ### Option 1: Run directly from your local clone (Recommended for testing)
 If you cloned the repository locally (e.g. to `~/git/crepe-mcp`), you can tell Goose to execute it directly via `uv run` without installing it globally:
@@ -101,11 +109,11 @@ extensions:
     type: stdio
     cmd: uv
     args: ["--directory", "/home/username/git/crepe-mcp", "run", "crepe-mcp"]
-    env_keys:
-      - CREPE_TAVILY_API_KEY
-      - CREPE_HEADLESS_BROWSER_PATH
-      - CREPE_ASPOSE_LICENSE_PATH
-      - CREPE_LIBREOFFICE_PATH
+    envs:
+      CREPE_TAVILY_API_KEY: ""
+      CREPE_HEADLESS_BROWSER_PATH: ""
+      CREPE_ASPOSE_LICENSE_PATH: ""
+      CREPE_LIBREOFFICE_PATH: ""
 ```
 *(Replace `/home/username/git/crepe-mcp` with your actual absolute path to the repository).*
 
@@ -119,11 +127,11 @@ extensions:
     type: stdio
     cmd: crepe-mcp
     args: []
-    env_keys:
-      - CREPE_TAVILY_API_KEY
-      - CREPE_HEADLESS_BROWSER_PATH
-      - CREPE_ASPOSE_LICENSE_PATH
-      - CREPE_LIBREOFFICE_PATH
+    envs:
+      CREPE_TAVILY_API_KEY: ""
+      CREPE_HEADLESS_BROWSER_PATH: ""
+      CREPE_ASPOSE_LICENSE_PATH: ""
+      CREPE_LIBREOFFICE_PATH: ""
 ```
 
 ### Option 3: Run ephemerally via `uvx` (Once published to PyPI)
@@ -136,11 +144,11 @@ extensions:
     type: stdio
     cmd: uvx
     args: ["crepe-mcp"]
-    env_keys:
-      - CREPE_TAVILY_API_KEY
-      - CREPE_HEADLESS_BROWSER_PATH
-      - CREPE_ASPOSE_LICENSE_PATH
-      - CREPE_LIBREOFFICE_PATH
+    envs:
+      CREPE_TAVILY_API_KEY: ""
+      CREPE_HEADLESS_BROWSER_PATH: ""
+      CREPE_ASPOSE_LICENSE_PATH: ""
+      CREPE_LIBREOFFICE_PATH: ""
 ```
 
 ### Option 4: Add via Goose CLI (`goose configure`)
@@ -151,7 +159,11 @@ If you prefer Goose's interactive terminal setup instead of editing `config.yaml
 4. For **Command**, enter either:
    - `crepe-mcp` (if installed globally)
    - OR `uv --directory /path/to/crepe-mcp run crepe-mcp` (for local repo)
-5. Add environment variable keys (`CREPE_TAVILY_API_KEY`, etc.) when prompted.
+5. When prompted for environment variables, add them as literal values
+   (`CREPE_TAVILY_API_KEY`, etc.) — all are optional, so only add the ones you
+   use. If `goose configure` only offers a secrets/keyring option rather than
+   a plain value, prefer editing `config.yaml` directly (Options 1-3 above)
+   to use `envs` instead.
 
 ## Typical agent workflow
 

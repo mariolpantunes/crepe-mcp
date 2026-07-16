@@ -145,8 +145,22 @@ def remove_shell_profile_block(profile_path: Path) -> None:
         print(f"🧹 Removed CREPE environment variables from profile: {profile_path}")
 
 
-def update_goose_config() -> None:
-    """Register or update CREPE MCP server in `~/.config/goose/config.yaml` using Option 1."""
+def update_goose_config(
+    tavily_key: str = "",
+    browser_path: str = "",
+    aspose_license: str = "",
+    libreoffice_path: str = "",
+) -> None:
+    """Register or update CREPE MCP server in `~/.config/goose/config.yaml` using Option 1.
+
+    Uses `envs` (literal values), not `env_keys` (secret-store references) --
+    Goose resolves every `env_keys` entry against its own keyring/secrets.yaml,
+    which this script never populates. Declaring optional vars there makes
+    Goose fail the whole extension with "Failed to fetch secret ... not found"
+    the moment one is unset (CREPE_ASPOSE_LICENSE_PATH being the common case,
+    since it's optional everywhere and unused on Linux entirely). `envs` just
+    passes the value through, or omits the key if there's nothing to pass.
+    """
     GOOSE_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     if GOOSE_CONFIG_PATH.exists():
         try:
@@ -158,6 +172,16 @@ def update_goose_config() -> None:
     else:
         config = {}
 
+    envs = {}
+    if tavily_key:
+        envs["CREPE_TAVILY_API_KEY"] = tavily_key
+    if browser_path:
+        envs["CREPE_HEADLESS_BROWSER_PATH"] = browser_path
+    if aspose_license:
+        envs["CREPE_ASPOSE_LICENSE_PATH"] = aspose_license
+    if libreoffice_path:
+        envs["CREPE_LIBREOFFICE_PATH"] = libreoffice_path
+
     extensions = config.setdefault("extensions", {})
     extensions["crepe"] = {
         "enabled": True,
@@ -167,12 +191,8 @@ def update_goose_config() -> None:
         "cmd": "uv",
         "args": ["--directory", SCRIPT_DIR, "run", "crepe-mcp"],
         "timeout": 300,
-        "env_keys": [
-            "CREPE_TAVILY_API_KEY",
-            "CREPE_HEADLESS_BROWSER_PATH",
-            "CREPE_ASPOSE_LICENSE_PATH",
-            "CREPE_LIBREOFFICE_PATH",
-        ],
+        "envs": envs,
+        "env_keys": [],
     }
 
     with open(GOOSE_CONFIG_PATH, "w", encoding="utf-8") as f:
@@ -297,7 +317,7 @@ def run_install(args: argparse.Namespace) -> None:
     update_shell_profile(profile_path, tavily_key, browser_path, aspose_lic, libreoffice_path)
 
     # 7. Update ~/.config/goose/config.yaml
-    update_goose_config()
+    update_goose_config(tavily_key, browser_path, aspose_lic, libreoffice_path)
 
     print("\n🎉 CREPE MCP server installation completed successfully!")
     print(f"💡 To apply environment variables immediately in your current terminal, run:\n    source {profile_path}")
