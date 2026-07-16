@@ -109,7 +109,8 @@ def update_shell_profile(
         re.escape(PROFILE_BLOCK_START) + r".*?" + re.escape(PROFILE_BLOCK_END) + r"\n?",
         re.DOTALL,
     )
-    content = pattern.sub("", content).rstrip() + "\n\n" if content.strip() else ""
+    content = pattern.sub("", content).rstrip()
+    content = content + "\n\n" if content else ""
 
     lines = [PROFILE_BLOCK_START]
     if tavily_key:
