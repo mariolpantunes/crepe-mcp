@@ -10,6 +10,7 @@ from __future__ import annotations
 import os
 import shutil
 import sys
+import threading
 from pathlib import Path
 
 import fitz  # pymupdf; also used by exporter.render_pdf_to_pngs
@@ -221,7 +222,57 @@ def main() -> None:
         f"open presentation_ids: {listed_ids}",
     )
 
-    # 9. export_presentation_source / import_presentation_source (round trip)
+    # 9. concurrency: expected_slide_count guard makes concurrent set_slide
+    # calls fail cleanly instead of silently landing at an unintended
+    # position. A plain lock alone measurably isn't enough here -- the
+    # reordering happens in OS thread scheduling before any of our code
+    # runs (measured ~14% failure rate at just 4 concurrent threads with a
+    # FIFO-ordered lock and no guard) -- so "all N succeed in issue order"
+    # isn't a safe property to assert. "Exactly one of N racing callers can
+    # win, the rest fail loudly" is deterministic under any lock and is
+    # what's actually tested here.
+    print("\nTesting expected_slide_count guard under concurrent contention...")
+    guard_pres = call_tool(server.create_presentation, title="Guard Test")
+    guard_pid = guard_pres["presentation_id"]
+    N = 8
+    results: list[dict] = [{} for _ in range(N)]
+
+    def _race_for_first_slide(i: int) -> None:
+        results[i] = call_tool(
+            server.set_slide, presentation_id=guard_pid, index=0,
+            title=f"Thread {i}", content=f"content {i}", expected_slide_count=0,
+        )
+
+    threads = [threading.Thread(target=_race_for_first_slide, args=(i,)) for i in range(N)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    successes = [r for r in results if r.get("success")]
+    failures = [r for r in results if not r.get("success")]
+    guard_result = call_tool(server.get_presentation, presentation_id=guard_pid)
+    print_check(
+        f"exactly one of {N} racing expected_slide_count=0 calls succeeds, the rest fail cleanly",
+        len(successes) == 1
+        and len(failures) == N - 1
+        and all("expected_slide_count" in f.get("error", "") for f in failures)
+        and guard_result.get("slide_count") == 1,
+        f"successes={len(successes)}, failures={len(failures)}, final slide_count={guard_result.get('slide_count')}",
+    )
+
+    res_guard_ok = call_tool(
+        server.set_slide, presentation_id=guard_pid, index=1,
+        title="Second slide", content="- ok", expected_slide_count=1,
+    )
+    print_check(
+        "expected_slide_count matching the true current count succeeds normally",
+        res_guard_ok.get("success") is True and res_guard_ok.get("slide_count") == 2,
+        f"result={res_guard_ok}",
+    )
+    call_tool(server.cleanup_presentation, presentation_id=guard_pid)
+
+    # 10. export_presentation_source / import_presentation_source (round trip)
     print("\nExporting presentation source to disk...")
     export_dir = f"/tmp/crepe_val_{pres_id}_src"
     res_export = call_tool(server.export_presentation_source, presentation_id=pres_id, output_dir=export_dir)
@@ -286,7 +337,7 @@ def main() -> None:
     call_tool(server.cleanup_presentation, presentation_id=new_pid)
     shutil.rmtree(export_dir, ignore_errors=True)
 
-    # 10. compile_presentation (PDF)
+    # 11. compile_presentation (PDF)
     pdf_output = f"/tmp/crepe_val_{pres_id}.pdf"
     print(f"\nCompiling presentation to Beamer PDF ({pdf_output})...")
     res_pdf = call_tool(
@@ -312,7 +363,7 @@ def main() -> None:
     )
     pdf_doc.close()
 
-    # 11. render_slides_as_pngs (PDF -> PNG via pymupdf)
+    # 12. render_slides_as_pngs (PDF -> PNG via pymupdf)
     pdf_png_dir = f"/tmp/crepe_val_{pres_id}_pdf_slides"
     print(f"\nRendering PDF slides as PNGs to {pdf_png_dir}...")
     res_pdf_png = call_tool(
@@ -332,7 +383,7 @@ def main() -> None:
         f"Generated {len(png_files)} PNGs, page_count={res_pdf_png.get('page_count')}",
     )
 
-    # 12. compile_presentation (PPTX)
+    # 13. compile_presentation (PPTX)
     pptx_output = f"/tmp/crepe_val_{pres_id}.pptx"
     print(f"\nCompiling presentation to PowerPoint PPTX ({pptx_output})...")
     res_pptx = call_tool(
@@ -347,7 +398,7 @@ def main() -> None:
         f"PPTX size: {os.path.getsize(pptx_output)} bytes",
     )
 
-    # 13. render_slides_as_pngs (PPTX -> PNG via LibreOffice; required on every platform)
+    # 14. render_slides_as_pngs (PPTX -> PNG via LibreOffice; required on every platform)
     pptx_png_dir = f"/tmp/crepe_val_{pres_id}_pptx_slides"
     print(f"\nRendering PPTX slides as PNGs to {pptx_png_dir}...")
     res_pptx_png = call_tool(
@@ -384,7 +435,7 @@ def main() -> None:
     if os.path.isfile(pptx_output):
         os.remove(pptx_output)
 
-    # 14. cleanup_presentation
+    # 15. cleanup_presentation
     print("\nCleaning up presentation workdir...")
     workdir = server._get_pres(pres_id).workdir
     res_cleanup = call_tool(server.cleanup_presentation, presentation_id=pres_id)
@@ -409,7 +460,7 @@ def main() -> None:
 
     print_section("STAGE 3: GROUP B (RESEARCH & WEB UTILITIES)")
 
-    # 15. web_search (Graceful warning check without key)
+    # 16. web_search (Graceful warning check without key)
     print("Testing web_search without CREPE_TAVILY_API_KEY...")
     os.environ.pop("CREPE_TAVILY_API_KEY", None)
     res_web = call_tool(server.web_search, query="MCP protocol updates")
@@ -419,7 +470,7 @@ def main() -> None:
         f"warning='{res_web.get('warning')}'",
     )
 
-    # 16. wikipedia_search & wikipedia_read
+    # 17. wikipedia_search & wikipedia_read
     print("\nTesting wikipedia_search & wikipedia_read...")
     res_wiki_s = call_tool(server.wikipedia_search, query="Pandoc", limit=2)
     wiki_results = res_wiki_s.get("results", [])
@@ -437,7 +488,7 @@ def main() -> None:
         f"Extracted {len(res_wiki_r.get('content', ''))} chars for '{wiki_title}'",
     )
 
-    # 17. academic_search
+    # 18. academic_search
     print("\nTesting academic_search (Semantic Scholar)...")
     res_acad = call_tool(server.academic_search, query="agentic coding large language models", limit=2)
     papers = res_acad.get("papers", [])
@@ -448,7 +499,7 @@ def main() -> None:
         f"Papers retrieved: {len(papers)} | error: '{res_acad.get('error', '')}'",
     )
 
-    # 18. fetch_webpage (urllib fallback check)
+    # 19. fetch_webpage (urllib fallback check)
     print("\nTesting fetch_webpage (urllib fallback mode)...")
     os.environ.pop("CREPE_HEADLESS_BROWSER_PATH", None)
     res_fetch = call_tool(server.fetch_webpage, url="https://example.com", max_chars=1000)

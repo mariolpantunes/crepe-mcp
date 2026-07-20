@@ -128,6 +128,7 @@ def set_slide(
     title: str,
     content: str,
     insert: bool = False,
+    expected_slide_count: Optional[int] = None,
 ) -> dict:
     """Add, replace, or insert a slide.
 
@@ -137,24 +138,28 @@ def set_slide(
     it later (index >= slide count still appends). Combine with
     delete_slide to move a slide to a new position.
 
-    `content` is raw Pandoc Markdown -- standard bullets/code/images/math
-    all work as expected. Less-obvious Pandoc/Beamer conventions:
+    `content` is raw Pandoc Markdown -- also supports speaker notes by
+    name alone. Exact syntax for three Beamer-specific conventions:
       Incremental bullets : > - item
-      Speaker notes        : ::: notes\\ntext\\n:::
       Section divider      : content is ONLY "# Section Title", nothing else
       Two-column layout    : :::: {.columns}\\n::: {.column width="50%"}\\nLeft\\n:::\\n::: {.column width="50%"}\\nRight\\n:::\\n::::
+
+    expected_slide_count : optional. If a concurrent call already changed
+    the deck since you last checked, this fails with a clear error instead
+    of silently landing at an unintended position -- get_presentation to
+    refresh, then retry. Recommended when issuing several set_slide calls
+    for the same presentation without waiting for each result first.
     """
     try:
         pres = _get_pres(presentation_id)
         if insert:
-            slide = _insert_slide(pres, index, title, content)
+            slide, actual_index = _insert_slide(pres, index, title, content, expected_slide_count)
             action = "inserted"
         else:
-            slide, action = upsert_slide(pres, index, title, content)
+            slide, action, actual_index = upsert_slide(pres, index, title, content, expected_slide_count)
     except ValueError as exc:
         return {"success": False, "error": str(exc)}
 
-    actual_index = pres.slides.index(slide)
     return {
         "success": True,
         "presentation_id": presentation_id,
@@ -167,11 +172,18 @@ def set_slide(
 
 
 @mcp.tool
-def delete_slide(presentation_id: str, index: int) -> dict:
-    """Remove a slide by index. Slides after it shift down by one."""
+def delete_slide(
+    presentation_id: str,
+    index: int,
+    expected_slide_count: Optional[int] = None,
+) -> dict:
+    """Remove a slide by index. Slides after it shift down by one.
+
+    expected_slide_count : optional, same stale-state guard as set_slide.
+    """
     try:
         pres = _get_pres(presentation_id)
-        slide = _delete_slide(pres, index)
+        slide = _delete_slide(pres, index, expected_slide_count)
     except (ValueError, IndexError) as exc:
         return {"success": False, "error": str(exc)}
 
@@ -193,10 +205,8 @@ def update_presentation_metadata(
     institute: Optional[str] = None,
     date: Optional[str] = None,
 ) -> dict:
-    """Update title-slide metadata on an existing presentation. Only fields
-    given a value are changed; others keep their current value -- use this
-    instead of recreating a presentation to fix a title typo after slides
-    already exist."""
+    """Update title-slide metadata (title/subtitle/author/institute/date)
+    on an existing presentation. Only fields given a value are changed."""
     try:
         pres = _get_pres(presentation_id)
         metadata = _update_metadata(
@@ -215,10 +225,7 @@ def update_presentation_metadata(
 
 @mcp.tool
 def list_presentations() -> dict:
-    """List every presentation currently held in memory (state and its
-    on-disk scratch dir persist until cleanup_presentation or process
-    exit). Use this to recover a lost presentation_id or find stale
-    presentations to clean up."""
+    """List every presentation currently held in memory."""
     presentations = [
         {
             "presentation_id": pres.id,
@@ -238,17 +245,11 @@ def export_presentation_source(
     theme: str = "moloch",
     highlight_style: str = "tango",
 ) -> dict:
-    """Return the exact pandoc source (slides Markdown + config.yml) this
-    presentation compiles from -- built with the same functions
-    compile_presentation uses, so it's byte-identical. Presentations only
-    live in memory (lost on restart or cleanup_presentation) with no other
-    durable copy, so this is how to save or inspect the source before that
-    happens.
+    """Return the pandoc source (slides Markdown + config.yml) this
+    presentation compiles from.
 
     output_dir : if given (absolute path), also writes slides.md/config.yml
-    there. theme/highlight_style : same meaning as compile_presentation;
-    not stored on the presentation, so pass whatever you compiled with to
-    get a matching config.yml.
+    there. theme/highlight_style : same meaning as compile_presentation.
     """
     try:
         pres = _get_pres(presentation_id)
@@ -287,18 +288,13 @@ def import_presentation_source(
     markdown: Optional[str] = None,
     source_path: Optional[str] = None,
 ) -> dict:
-    """Replace a presentation's slides by parsing pandoc slide Markdown --
-    the inverse of export_presentation_source. Splits on '##' (slide) and
-    bare '#' (section-divider) headings, ignoring '#' inside fenced code
-    blocks so a code comment is never mistaken for a heading. Use this to
-    restore an exported deck or bulk-load a hand-edited Markdown file in
-    one call instead of many set_slide calls.
+    """Replace a presentation's slides by parsing pandoc slide Markdown.
+    Splits on '##' (slide) and bare '#' (section-divider) headings,
+    ignoring '#' inside fenced code blocks.
 
-    presentation_id must already exist (create_presentation first) --
-    every slide it currently has is replaced; metadata is untouched.
-    Exactly one of markdown (inline content) or source_path (absolute path
-    to a .md file, e.g. one written by export_presentation_source) must be
-    given.
+    presentation_id must already exist. Every slide it currently has is
+    replaced; metadata is untouched. Exactly one of markdown (inline
+    content) or source_path (absolute path to a .md file) must be given.
     """
     if (markdown is None) == (source_path is None):
         return {"success": False, "error": "Pass exactly one of markdown or source_path."}
@@ -346,12 +342,8 @@ def compile_presentation(
     validate visually.
 
     format : 'pdf' (Beamer/lualatex) or 'pptx' (PowerPoint).
-    theme  : any Beamer theme installed on this system (PDF only) --
-    passed through to pandoc/LaTeX unvalidated, not a fixed list. Default
-    'moloch' already works with no special handling; other options include
-    'metropolis', 'Madrid', 'Berlin', 'default', 'Warsaw'. An invalid name
-    surfaces as a LaTeX error in this tool's response -- no need to
-    hand-write/compile Beamer LaTeX outside this tool for an unlisted theme.
+    theme  : any Beamer theme name installed on this system (PDF only),
+    default 'moloch'.
     highlight_style : code highlight style, default 'tango'.
     reference_doc   : path to a .pptx template (PPTX only, optional).
     """
@@ -393,10 +385,7 @@ def render_slides_as_pngs(
     dpi: int = 150,
 ) -> dict:
     """Convert a compiled artifact to a numbered PNG sequence for visual
-    validation. format must match a previously compiled artifact -- PDF
-    (pymupdf) and PPTX (LibreOffice headless, required, no fallback) render
-    differently and can't substitute for each other. output_dir defaults
-    to <artifact_path>.slides/; dpi default 150."""
+    validation. format must match a previously compiled artifact."""
     if format not in ("pdf", "pptx"):
         return {"success": False, "error": f"format must be 'pdf' or 'pptx', got {format!r}"}
     try:
@@ -444,10 +433,7 @@ def render_slides_as_pngs(
 
 @mcp.tool
 def cleanup_presentation(presentation_id: str) -> dict:
-    """Delete a presentation's in-memory state and on-disk scratch dir.
-    Call once its compiled artifacts (PDF/PPTX/PNGs) have been delivered --
-    otherwise the workdir persists until this is called or the process
-    exits."""
+    """Delete a presentation's in-memory state and on-disk scratch dir."""
     try:
         _delete_pres(presentation_id)
     except ValueError as exc:
