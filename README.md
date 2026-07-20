@@ -5,7 +5,7 @@ agent into a capable slide author: draft decks in Pandoc Markdown, compile to
 Beamer PDF or PowerPoint, validate visually with PNG exports, and pull in
 research from the web, Wikipedia and Semantic Scholar.
 
-## Tools (15 total)
+## Tools (17 total)
 
 ### Presentation (stateful)
 | Tool | Purpose |
@@ -17,6 +17,8 @@ research from the web, Wikipedia and Semantic Scholar.
 | `delete_slide` | Remove a slide by index; later slides shift down |
 | `update_presentation_metadata` | Change title/subtitle/author/institute/date without rebuilding the deck |
 | `list_presentations` | Enumerate presentation_ids currently held in memory |
+| `export_presentation_source` | Get the exact pandoc Markdown + config.yml this deck compiles from (optionally written to disk) |
+| `import_presentation_source` | Replace a deck's slides by parsing previously-exported (or hand-edited) pandoc Markdown |
 | `compile_presentation` | Compile to PDF (Beamer/lualatex) or PPTX (pandoc) |
 | `render_slides_as_pngs` | Render compiled artifact to PNG sequence for validation |
 | `cleanup_presentation` | Delete a presentation's in-memory state and on-disk scratch dir |
@@ -178,7 +180,7 @@ render_slides_as_pngs(id, format="pptx")  # validate PPTX layout
 
 | Element | Syntax |
 |---------|--------|
-| Section divider | `# Section Title` as slide content |
+| Section divider | `# Section Title` as slide content (rendered as a bare heading, not its own frame -- adds a table-of-contents page and, on `moloch`/`metropolis`, an automatic section-title frame). PDF compiles with no `--toc` at all if the deck defines no sections. |
 | Bullet | `- item` |
 | Incremental bullet | `> - item` |
 | Math block | `$$ E=mc^2 $$` |

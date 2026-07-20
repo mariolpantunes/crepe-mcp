@@ -1,6 +1,6 @@
 """CREPE — Compile, Research, Export, Presentation Engine.
 
-FastMCP server exposing 15 tools across two groups:
+FastMCP server exposing 17 tools across two groups:
 
 GROUP A — Stateful presentation builder
   1.  create_presentation
@@ -10,16 +10,18 @@ GROUP A — Stateful presentation builder
   5.  delete_slide
   6.  update_presentation_metadata
   7.  list_presentations
-  8.  compile_presentation
-  9.  render_slides_as_pngs
-  10. cleanup_presentation
+  8.  export_presentation_source
+  9.  import_presentation_source
+  10. compile_presentation
+  11. render_slides_as_pngs
+  12. cleanup_presentation
 
 GROUP B — Research & web utilities
-  11. academic_search
-  12. web_search
-  13. wikipedia_search
-  14. wikipedia_read
-  15. fetch_webpage
+  13. academic_search
+  14. web_search
+  15. wikipedia_search
+  16. wikipedia_read
+  17. fetch_webpage
 
 Environment variables (all CREPE_ prefixed):
   CREPE_TAVILY_API_KEY        — Tavily API key for web_search
@@ -34,7 +36,7 @@ from fastmcp import FastMCP
 
 from crepe_mcp.compiler import CompileError, compile_to_pdf, compile_to_pptx
 from crepe_mcp.exporter import render_pdf_to_pngs, render_pptx_to_pngs
-from crepe_mcp.renderer import build_slides_markdown
+from crepe_mcp.renderer import build_config_yaml, build_slides_markdown, parse_slides_markdown
 from crepe_mcp import research
 from crepe_mcp.store import (
     delete_presentation as _delete_pres,
@@ -264,6 +266,121 @@ def list_presentations() -> dict:
         for pres in _list_pres()
     ]
     return {"presentations": presentations}
+
+
+@mcp.tool
+def export_presentation_source(
+    presentation_id: str,
+    output_dir: Optional[str] = None,
+    theme: str = "moloch",
+    highlight_style: str = "tango",
+) -> dict:
+    """Return the exact pandoc source this presentation compiles from.
+
+    Presentations only live in memory -- state is lost on server restart or
+    cleanup_presentation, with no other durable copy. This returns the same
+    slides Markdown and config.yml metadata/theme block that
+    compile_presentation actually feeds to pandoc (byte-for-byte, since it's
+    built with the same functions), so it can be inspected, diffed, or saved
+    outside the tool before that state disappears.
+
+    Parameters
+    ----------
+    output_dir      : If given (absolute path), also writes slides.md and
+                       config.yml there (directory created if needed).
+    theme / highlight_style : Same meaning as compile_presentation. Not
+                       stored on the presentation -- pass whatever you last
+                       compiled with to get a matching config.yml.
+    """
+    try:
+        pres = _get_pres(presentation_id)
+    except ValueError as exc:
+        return {"success": False, "error": str(exc)}
+
+    markdown = build_slides_markdown(pres)
+    config_yaml = build_config_yaml(pres, theme=theme, highlight_style=highlight_style)
+
+    result: dict = {
+        "success": True,
+        "presentation_id": presentation_id,
+        "markdown": markdown,
+        "config_yaml": config_yaml,
+    }
+
+    if output_dir is not None:
+        if not os.path.isabs(output_dir):
+            return {"success": False, "error": f"output_dir must be an absolute path, got {output_dir!r}"}
+        os.makedirs(output_dir, exist_ok=True)
+        slides_path = os.path.join(output_dir, "slides.md")
+        config_path = os.path.join(output_dir, "config.yml")
+        with open(slides_path, "w", encoding="utf-8") as f:
+            f.write(markdown)
+        with open(config_path, "w", encoding="utf-8") as f:
+            f.write(config_yaml)
+        result["slides_path"] = slides_path
+        result["config_path"] = config_path
+
+    return result
+
+
+@mcp.tool
+def import_presentation_source(
+    presentation_id: str,
+    markdown: Optional[str] = None,
+    source_path: Optional[str] = None,
+) -> dict:
+    """Replace a presentation's slides by parsing pandoc slide Markdown.
+
+    Reverses export_presentation_source: splits the given Markdown on '##'
+    (slide) and bare '#' (section-divider) headings -- ignoring '#'
+    characters inside fenced code blocks, so a comment like '# TODO' in a
+    code sample is never mistaken for a heading -- and replaces every slide
+    currently in the presentation with the parsed result. Use this to
+    restore a deck exported earlier, or to bulk-load a hand-edited Markdown
+    file in one call instead of many set_slide calls.
+
+    presentation_id must already exist (call create_presentation first);
+    this populates an existing presentation rather than creating a new one.
+    Metadata (title/author/...) is untouched -- use
+    update_presentation_metadata separately if needed.
+
+    Exactly one of markdown or source_path must be given.
+
+    markdown    : Inline Markdown content.
+    source_path : Absolute path to a .md file to read instead (e.g. one
+                  written by export_presentation_source, or a hand-edited
+                  copy of one).
+    """
+    if (markdown is None) == (source_path is None):
+        return {"success": False, "error": "Pass exactly one of markdown or source_path."}
+    try:
+        pres = _get_pres(presentation_id)
+    except ValueError as exc:
+        return {"success": False, "error": str(exc)}
+
+    if source_path is not None:
+        if not os.path.isabs(source_path):
+            return {"success": False, "error": f"source_path must be an absolute path, got {source_path!r}"}
+        if not os.path.isfile(source_path):
+            return {"success": False, "error": f"source_path not found: {source_path!r}"}
+        with open(source_path, "r", encoding="utf-8") as f:
+            markdown = f.read()
+    assert markdown is not None  # guaranteed by the exactly-one-of check above
+
+    try:
+        parsed = parse_slides_markdown(markdown)
+    except ValueError as exc:
+        return {"success": False, "error": str(exc)}
+
+    pres.slides.clear()
+    for title, content in parsed:
+        upsert_slide(pres, len(pres.slides), title, content)
+
+    return {
+        "success": True,
+        "presentation_id": presentation_id,
+        "slide_count": len(pres.slides),
+    }
 
 
 @mcp.tool

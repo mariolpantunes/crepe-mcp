@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Comprehensive end-to-end validation test harness for the CREPE MCP server.
 
-Runs all 15 tools across Group A (Stateful Presentation Builder) and Group B
+Runs all 17 tools across Group A (Stateful Presentation Builder) and Group B
 (Research & Web Utilities), asserting expected structure, error/warning handling,
 and physical file creation (.pdf, .pptx, and .png sequences).
 """
@@ -11,6 +11,8 @@ import os
 import shutil
 import sys
 from pathlib import Path
+
+import fitz  # pymupdf; also used by exporter.render_pdf_to_pngs
 
 # Add src/ to sys.path if running directly
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
@@ -219,7 +221,72 @@ def main() -> None:
         f"open presentation_ids: {listed_ids}",
     )
 
-    # 9. compile_presentation (PDF)
+    # 9. export_presentation_source / import_presentation_source (round trip)
+    print("\nExporting presentation source to disk...")
+    export_dir = f"/tmp/crepe_val_{pres_id}_src"
+    res_export = call_tool(server.export_presentation_source, presentation_id=pres_id, output_dir=export_dir)
+    print_check(
+        "export_presentation_source writes slides.md and config.yml",
+        res_export.get("success") is True
+        and os.path.isfile(res_export.get("slides_path", ""))
+        and os.path.isfile(res_export.get("config_path", ""))
+        and "# Section" not in res_export.get("markdown", "").split("\n")[0]  # sanity: real content, not a stub
+        and len(res_export.get("markdown", "")) > 0,
+        f"slides_path={res_export.get('slides_path')}, markdown_len={len(res_export.get('markdown', ''))}",
+    )
+    res_export_bad = call_tool(server.export_presentation_source, presentation_id=pres_id, output_dir="relative/path")
+    print_check(
+        "export_presentation_source rejects a relative output_dir",
+        res_export_bad.get("success") is False,
+        f"error={res_export_bad.get('error')!r}",
+    )
+
+    print("\nImporting exported source into a fresh presentation...")
+    res_new = call_tool(server.create_presentation, title="Import Target")
+    new_pid = res_new["presentation_id"]
+    res_import = call_tool(server.import_presentation_source, presentation_id=new_pid, source_path=res_export["slides_path"])
+    print_check(
+        "import_presentation_source reconstructs the same slide count from the exported file",
+        res_import.get("success") is True and res_import.get("slide_count") == 3,
+        f"import result={res_import}",
+    )
+    orig_slide_1 = call_tool(server.get_slide, presentation_id=pres_id, slide_index=1)
+    new_slide_1 = call_tool(server.get_slide, presentation_id=new_pid, slide_index=1)
+    print_check(
+        "imported slide content matches the original byte-for-byte",
+        orig_slide_1.get("title") == new_slide_1.get("title")
+        and orig_slide_1.get("content") == new_slide_1.get("content"),
+        f"title match={orig_slide_1.get('title') == new_slide_1.get('title')}",
+    )
+    res_import_both = call_tool(
+        server.import_presentation_source, presentation_id=new_pid,
+        markdown="## x", source_path=res_export["slides_path"],
+    )
+    print_check(
+        "import_presentation_source rejects passing both markdown and source_path",
+        res_import_both.get("success") is False,
+        f"error={res_import_both.get('error')!r}",
+    )
+    res_import_bad_md = call_tool(server.import_presentation_source, presentation_id=new_pid, markdown="no heading here")
+    print_check(
+        "import_presentation_source rejects Markdown with no heading",
+        res_import_bad_md.get("success") is False,
+        f"error={res_import_bad_md.get('error')!r}",
+    )
+    fence_markdown = "## Code Slide\n\n```python\n# not a heading\ndef f():\n    ## also not a heading\n    return 1\n```\n"
+    res_import_fence = call_tool(server.import_presentation_source, presentation_id=new_pid, markdown=fence_markdown)
+    fence_slide = call_tool(server.get_slide, presentation_id=new_pid, slide_index=0)
+    print_check(
+        "import_presentation_source does not split on '#'/'##' inside a fenced code block",
+        res_import_fence.get("success") is True
+        and res_import_fence.get("slide_count") == 1
+        and "# not a heading" in fence_slide.get("content", ""),
+        f"slide_count={res_import_fence.get('slide_count')}, content={fence_slide.get('content')!r}",
+    )
+    call_tool(server.cleanup_presentation, presentation_id=new_pid)
+    shutil.rmtree(export_dir, ignore_errors=True)
+
+    # 10. compile_presentation (PDF)
     pdf_output = f"/tmp/crepe_val_{pres_id}.pdf"
     print(f"\nCompiling presentation to Beamer PDF ({pdf_output})...")
     res_pdf = call_tool(
@@ -235,7 +302,17 @@ def main() -> None:
         f"PDF size: {os.path.getsize(pdf_output)} bytes",
     )
 
-    # 10. render_slides_as_pngs (PDF -> PNG via pymupdf)
+    slide_count = call_tool(server.get_presentation, presentation_id=pres_id)["slide_count"]
+    pdf_doc = fitz.open(pdf_output)
+    print_check(
+        "compiled PDF has no blank auto-TOC frame when the deck defines no sections "
+        "(1 title page + 1 page per slide, nothing extra)",
+        pdf_doc.page_count == 1 + slide_count,
+        f"page_count={pdf_doc.page_count}, slide_count={slide_count}",
+    )
+    pdf_doc.close()
+
+    # 11. render_slides_as_pngs (PDF -> PNG via pymupdf)
     pdf_png_dir = f"/tmp/crepe_val_{pres_id}_pdf_slides"
     print(f"\nRendering PDF slides as PNGs to {pdf_png_dir}...")
     res_pdf_png = call_tool(
@@ -255,7 +332,7 @@ def main() -> None:
         f"Generated {len(png_files)} PNGs, page_count={res_pdf_png.get('page_count')}",
     )
 
-    # 11. compile_presentation (PPTX)
+    # 12. compile_presentation (PPTX)
     pptx_output = f"/tmp/crepe_val_{pres_id}.pptx"
     print(f"\nCompiling presentation to PowerPoint PPTX ({pptx_output})...")
     res_pptx = call_tool(
@@ -270,7 +347,7 @@ def main() -> None:
         f"PPTX size: {os.path.getsize(pptx_output)} bytes",
     )
 
-    # 12. render_slides_as_pngs (PPTX -> PNG via LibreOffice; required on every platform)
+    # 13. render_slides_as_pngs (PPTX -> PNG via LibreOffice; required on every platform)
     pptx_png_dir = f"/tmp/crepe_val_{pres_id}_pptx_slides"
     print(f"\nRendering PPTX slides as PNGs to {pptx_png_dir}...")
     res_pptx_png = call_tool(
@@ -307,7 +384,7 @@ def main() -> None:
     if os.path.isfile(pptx_output):
         os.remove(pptx_output)
 
-    # 13. cleanup_presentation
+    # 14. cleanup_presentation
     print("\nCleaning up presentation workdir...")
     workdir = server._get_pres(pres_id).workdir
     res_cleanup = call_tool(server.cleanup_presentation, presentation_id=pres_id)
@@ -332,7 +409,7 @@ def main() -> None:
 
     print_section("STAGE 3: GROUP B (RESEARCH & WEB UTILITIES)")
 
-    # 14. web_search (Graceful warning check without key)
+    # 15. web_search (Graceful warning check without key)
     print("Testing web_search without CREPE_TAVILY_API_KEY...")
     os.environ.pop("CREPE_TAVILY_API_KEY", None)
     res_web = call_tool(server.web_search, query="MCP protocol updates")
@@ -342,7 +419,7 @@ def main() -> None:
         f"warning='{res_web.get('warning')}'",
     )
 
-    # 15. wikipedia_search & wikipedia_read
+    # 16. wikipedia_search & wikipedia_read
     print("\nTesting wikipedia_search & wikipedia_read...")
     res_wiki_s = call_tool(server.wikipedia_search, query="Pandoc", limit=2)
     wiki_results = res_wiki_s.get("results", [])
@@ -360,7 +437,7 @@ def main() -> None:
         f"Extracted {len(res_wiki_r.get('content', ''))} chars for '{wiki_title}'",
     )
 
-    # 16. academic_search
+    # 17. academic_search
     print("\nTesting academic_search (Semantic Scholar)...")
     res_acad = call_tool(server.academic_search, query="agentic coding large language models", limit=2)
     papers = res_acad.get("papers", [])
@@ -371,7 +448,7 @@ def main() -> None:
         f"Papers retrieved: {len(papers)} | error: '{res_acad.get('error', '')}'",
     )
 
-    # 17. fetch_webpage (urllib fallback check)
+    # 18. fetch_webpage (urllib fallback check)
     print("\nTesting fetch_webpage (urllib fallback mode)...")
     os.environ.pop("CREPE_HEADLESS_BROWSER_PATH", None)
     res_fetch = call_tool(server.fetch_webpage, url="https://example.com", max_chars=1000)
@@ -388,7 +465,7 @@ def main() -> None:
         f"error='{res_fetch_file.get('error')}'",
     )
 
-    print_section("ALL 15 TOOLS SUCCESSFULLY VALIDATED!")
+    print_section("ALL 17 TOOLS SUCCESSFULLY VALIDATED!")
 
 
 if __name__ == "__main__":
