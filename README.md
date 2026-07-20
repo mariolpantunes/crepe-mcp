@@ -5,7 +5,7 @@ agent into a capable slide author: draft decks in Pandoc Markdown, compile to
 Beamer PDF or PowerPoint, validate visually with PNG exports, and pull in
 research from the web, Wikipedia and Semantic Scholar.
 
-## Tools (12 total)
+## Tools (15 total)
 
 ### Presentation (stateful)
 | Tool | Purpose |
@@ -13,7 +13,10 @@ research from the web, Wikipedia and Semantic Scholar.
 | `create_presentation` | Start a new deck, set all metadata |
 | `get_presentation` | Inspect metadata + slide list |
 | `get_slide` | Read a single slide's full content |
-| `set_slide` | Add or replace a slide (index < len → replace, else append) |
+| `set_slide` | Add, replace, or insert a slide (`insert=False` default: index < len → replace, else append; `insert=True` shifts later slides down) |
+| `delete_slide` | Remove a slide by index; later slides shift down |
+| `update_presentation_metadata` | Change title/subtitle/author/institute/date without rebuilding the deck |
+| `list_presentations` | Enumerate presentation_ids currently held in memory |
 | `compile_presentation` | Compile to PDF (Beamer/lualatex) or PPTX (pandoc) |
 | `render_slides_as_pngs` | Render compiled artifact to PNG sequence for validation |
 | `cleanup_presentation` | Delete a presentation's in-memory state and on-disk scratch dir |
@@ -44,20 +47,13 @@ uv tool install .
 - **pandoc** — slide compilation
 - **lualatex** — PDF/Beamer output (`texlive-full` or MacTeX)
 - **pymupdf** — PDF→PNG rendering (installed via pip, no system dep)
-- **PPTX→PNG rendering** — platform-dependent:
-  - **Linux**: **LibreOffice is required** (native `soffice`/`libreoffice` on
-    PATH, or installed as a Flatpak — `flatpak install flathub
-    org.libreoffice.LibreOffice`, auto-detected at runtime, no config needed).
-    There is no fallback on Linux: aspose-slides' embedded .NET runtime
-    dynamically loads `libssl.so.1.1`, which distros that ship only OpenSSL 3
-    (Slackware, recent Arch, etc.) no longer have, and no newer aspose-slides
-    release has moved off it. Without LibreOffice, `render_slides_as_pngs`
-    (`format="pptx"`) returns a clean error instead of a crash.
-  - **macOS** (and other platforms): LibreOffice is preferred if found (native
-    binary or `/Applications/LibreOffice.app`); otherwise falls back to
-    **aspose-slides** (installed via pip — no OpenSSL 1.1 issue on macOS).
-    Aspose is a commercial library; without `CREPE_ASPOSE_LICENSE_PATH` it
-    runs in evaluation mode and watermarks output PNGs.
+- **LibreOffice** — required on every platform for PPTX→PNG rendering
+  (native `soffice`/`libreoffice` on PATH, the macOS app bundle at
+  `/Applications/LibreOffice.app`, or — Linux only — a Flatpak install,
+  `flatpak install flathub org.libreoffice.LibreOffice`, auto-detected at
+  runtime, no config needed). There is no fallback: without LibreOffice,
+  `render_slides_as_pngs` (`format="pptx"`) returns a clean error instead
+  of a crash.
 
 ## Environment variables
 
@@ -67,8 +63,7 @@ All variables are prefixed with `CREPE_` to avoid collisions.
 |----------|----------|---------|
 | `CREPE_TAVILY_API_KEY` | No | Enables `web_search` via Tavily; graceful warning if absent |
 | `CREPE_HEADLESS_BROWSER_PATH` | No | Path to Chromium-compatible browser for `fetch_webpage`. See [macOS Browser Paths](#macos--headless-browser-setup) below. Falls back to urllib if unset. |
-| `CREPE_LIBREOFFICE_PATH` | No | Path to a `soffice`/`libreoffice` executable, overriding auto-detection. Required on Linux only if auto-detection (PATH, Flatpak) fails. |
-| `CREPE_ASPOSE_LICENSE_PATH` | No | Path to Aspose `.lic` file for watermark-free PPTX→PNG export on the aspose fallback path (macOS/other, when LibreOffice isn't found). Evaluation mode (with watermarks) is used if unset. |
+| `CREPE_LIBREOFFICE_PATH` | No | Path to a `soffice`/`libreoffice` executable, overriding auto-detection. Only needed if auto-detection (PATH, macOS app bundle, Flatpak) fails. |
 
 ### macOS & Headless Browser Setup
 To enable JavaScript-rendered webpage fetching via `fetch_webpage` on **macOS**, set `CREPE_HEADLESS_BROWSER_PATH` to any Chromium-based browser application path:
@@ -112,7 +107,6 @@ extensions:
     envs:
       CREPE_TAVILY_API_KEY: ""
       CREPE_HEADLESS_BROWSER_PATH: ""
-      CREPE_ASPOSE_LICENSE_PATH: ""
       CREPE_LIBREOFFICE_PATH: ""
 ```
 *(Replace `/home/username/git/crepe-mcp` with your actual absolute path to the repository).*
@@ -130,7 +124,6 @@ extensions:
     envs:
       CREPE_TAVILY_API_KEY: ""
       CREPE_HEADLESS_BROWSER_PATH: ""
-      CREPE_ASPOSE_LICENSE_PATH: ""
       CREPE_LIBREOFFICE_PATH: ""
 ```
 
@@ -147,7 +140,6 @@ extensions:
     envs:
       CREPE_TAVILY_API_KEY: ""
       CREPE_HEADLESS_BROWSER_PATH: ""
-      CREPE_ASPOSE_LICENSE_PATH: ""
       CREPE_LIBREOFFICE_PATH: ""
 ```
 

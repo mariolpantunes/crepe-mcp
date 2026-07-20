@@ -173,6 +173,16 @@ def fetch_webpage(url: str, max_chars: int = 15000) -> dict:
     Uses the browser at CREPE_HEADLESS_BROWSER_PATH (--headless=new --dump-dom)
     when set; falls back to urllib + HTML stripping with a warning.
     """
+    scheme = urllib.parse.urlsplit(url).scheme.lower()
+    if scheme not in ("http", "https"):
+        return {
+            "content": "",
+            "error": (
+                f"Unsupported URL scheme {scheme!r}; only http:// and https:// "
+                "are allowed (e.g. file:// would disclose local files)."
+            ),
+        }
+
     browser_path = os.environ.get("CREPE_HEADLESS_BROWSER_PATH", "").strip()
     warning: Optional[str] = None
 

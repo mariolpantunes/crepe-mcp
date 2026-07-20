@@ -226,6 +226,3 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
-
-# crepe-mcp specific
-*.lic

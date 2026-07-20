@@ -1,27 +1,29 @@
 """CREPE — Compile, Research, Export, Presentation Engine.
 
-FastMCP server exposing 12 tools across two groups:
+FastMCP server exposing 15 tools across two groups:
 
 GROUP A — Stateful presentation builder
   1.  create_presentation
   2.  get_presentation
   3.  get_slide
   4.  set_slide
-  5.  compile_presentation
-  6.  render_slides_as_pngs
-  7.  cleanup_presentation
+  5.  delete_slide
+  6.  update_presentation_metadata
+  7.  list_presentations
+  8.  compile_presentation
+  9.  render_slides_as_pngs
+  10. cleanup_presentation
 
 GROUP B — Research & web utilities
-  8.  academic_search
-  9.  web_search
-  10. wikipedia_search
-  11. wikipedia_read
-  12. fetch_webpage
+  11. academic_search
+  12. web_search
+  13. wikipedia_search
+  14. wikipedia_read
+  15. fetch_webpage
 
 Environment variables (all CREPE_ prefixed):
   CREPE_TAVILY_API_KEY        — Tavily API key for web_search
   CREPE_HEADLESS_BROWSER_PATH — path to Chromium-compatible browser
-  CREPE_ASPOSE_LICENSE_PATH   — Aspose .lic path for watermark-free PPTX PNGs
 """
 from __future__ import annotations
 
@@ -36,9 +38,13 @@ from crepe_mcp.renderer import build_slides_markdown
 from crepe_mcp import research
 from crepe_mcp.store import (
     delete_presentation as _delete_pres,
+    delete_slide as _delete_slide,
     get_presentation as _get_pres,
     get_slide_by_index as _get_slide,
+    insert_slide as _insert_slide,
+    list_presentations as _list_pres,
     new_presentation,
+    update_metadata as _update_metadata,
     upsert_slide,
 )
 
@@ -132,11 +138,19 @@ def set_slide(
     index: int,
     title: str,
     content: str,
+    insert: bool = False,
 ) -> dict:
-    """Add or replace a slide.
+    """Add, replace, or insert a slide.
 
-    index < current slide count  → replace the slide at that position.
-    index >= current slide count → append a new slide at the end.
+    insert=False (default):
+      index < current slide count  → replace the slide at that position.
+      index >= current slide count → append a new slide at the end.
+
+    insert=True:
+      Inserts a new slide at index, shifting that slide and everything
+      after it one position later. index >= current slide count still
+      appends. Combine with delete_slide to move a slide to a new
+      position (delete it, then insert it elsewhere).
 
     `content` is the raw Pandoc Markdown body for the slide. Supported syntax:
 
@@ -162,7 +176,11 @@ def set_slide(
     """
     try:
         pres = _get_pres(presentation_id)
-        slide, action = upsert_slide(pres, index, title, content)
+        if insert:
+            slide = _insert_slide(pres, index, title, content)
+            action = "inserted"
+        else:
+            slide, action = upsert_slide(pres, index, title, content)
     except ValueError as exc:
         return {"success": False, "error": str(exc)}
 
@@ -176,6 +194,76 @@ def set_slide(
         "title": slide.title,
         "slide_count": len(pres.slides),
     }
+
+
+@mcp.tool
+def delete_slide(presentation_id: str, index: int) -> dict:
+    """Remove a slide by index. Slides after it shift down by one."""
+    try:
+        pres = _get_pres(presentation_id)
+        slide = _delete_slide(pres, index)
+    except (ValueError, IndexError) as exc:
+        return {"success": False, "error": str(exc)}
+
+    return {
+        "success": True,
+        "presentation_id": presentation_id,
+        "deleted_id": slide.id,
+        "deleted_title": slide.title,
+        "slide_count": len(pres.slides),
+    }
+
+
+@mcp.tool
+def update_presentation_metadata(
+    presentation_id: str,
+    title: Optional[str] = None,
+    subtitle: Optional[str] = None,
+    author: Optional[str] = None,
+    institute: Optional[str] = None,
+    date: Optional[str] = None,
+) -> dict:
+    """Update title-slide metadata on an existing presentation.
+
+    Only fields passed a value are changed; omitted (None) fields keep
+    their current value. Use this instead of recreating a presentation
+    just to fix a typo in the title after slides have already been added.
+    """
+    try:
+        pres = _get_pres(presentation_id)
+        metadata = _update_metadata(
+            pres, title=title, subtitle=subtitle,
+            author=author, institute=institute, date=date,
+        )
+    except ValueError as exc:
+        return {"success": False, "error": str(exc)}
+
+    return {
+        "success": True,
+        "presentation_id": presentation_id,
+        "metadata": vars(metadata),
+    }
+
+
+@mcp.tool
+def list_presentations() -> dict:
+    """List every presentation currently held in memory.
+
+    Presentations stay in memory (and keep their on-disk scratch dir)
+    until cleanup_presentation is called or the process exits. Use this
+    to recover a presentation_id you've lost track of, or to find stale
+    presentations worth cleaning up.
+    """
+    presentations = [
+        {
+            "presentation_id": pres.id,
+            "title": pres.metadata.title,
+            "slide_count": len(pres.slides),
+            "artifacts": list(pres.artifacts.keys()),
+        }
+        for pres in _list_pres()
+    ]
+    return {"presentations": presentations}
 
 
 @mcp.tool
@@ -250,9 +338,8 @@ def render_slides_as_pngs(
     dpi        : Render resolution (default 150).
 
     PDF  path : pymupdf — pure Python, no system deps.
-    PPTX path : LibreOffice headless where available (required on Linux, no
-                fallback); otherwise aspose-slides — set CREPE_ASPOSE_LICENSE_PATH
-                for watermark-free output on that fallback path.
+    PPTX path : LibreOffice headless (required — see README for install
+                instructions on your platform).
     """
     if format not in ("pdf", "pptx"):
         return {"success": False, "error": f"format must be 'pdf' or 'pptx', got {format!r}"}
@@ -279,16 +366,15 @@ def render_slides_as_pngs(
     try:
         if format == "pdf":
             png_files = render_pdf_to_pngs(artifact_path, output_dir, dpi=dpi)
-            warning = None
             converter = "pymupdf"
         else:
-            png_files, warning, converter = render_pptx_to_pngs(artifact_path, output_dir, dpi=dpi)
+            png_files, converter = render_pptx_to_pngs(artifact_path, output_dir, dpi=dpi)
     except ImportError as exc:
         return {"success": False, "error": str(exc)}
     except Exception as exc:
         return {"success": False, "error": f"Rendering failed: {exc}"}
 
-    result: dict = {
+    return {
         "success": True,
         "presentation_id": presentation_id,
         "format": format,
@@ -298,9 +384,6 @@ def render_slides_as_pngs(
         "dpi": dpi,
         "converter": converter,
     }
-    if warning:
-        result["warning"] = warning
-    return result
 
 
 @mcp.tool

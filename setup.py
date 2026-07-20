@@ -2,9 +2,10 @@
 """Setup script for CREPE MCP server integration with Goose Agent (`Option 1: Local Development`).
 
 Uses argparse to provide --install and --uninstall modes, auto-detects system dependencies
-(`shutil.which` for Chrome/Chromium and macOS `/Applications` paths), prompts for user feedback
-when values are missing, exports environment variables (`CREPE_` prefixed) to the user's shell
-profile (`~/.bashrc` / `~/.zshrc`), and updates `~/.config/goose/config.yaml`.
+(`shutil.which` for Chrome/Chromium/LibreOffice and macOS `/Applications` paths), prompts for
+user feedback when values are missing, exports non-secret environment variables (`CREPE_`
+prefixed) to the user's shell profile (`~/.bashrc` / `~/.zshrc`), and updates
+`~/.config/goose/config.yaml`.
 """
 from __future__ import annotations
 
@@ -27,6 +28,7 @@ except ImportError:
 SCRIPT_DIR = str(Path(__file__).resolve().parent)
 GOOSE_CONFIG_DIR = Path.home() / ".config" / "goose"
 GOOSE_CONFIG_PATH = GOOSE_CONFIG_DIR / "config.yaml"
+GOOSE_CONFIG_BACKUP_PATH = GOOSE_CONFIG_DIR / "config.yaml.bak"
 
 # Block delimiters for shell profile injection
 PROFILE_BLOCK_START = "# === CREPE MCP Environment Variables ==="
@@ -96,12 +98,16 @@ def find_libreoffice() -> Optional[str]:
 
 def update_shell_profile(
     profile_path: Path,
-    tavily_key: str,
     browser_path: str,
-    aspose_license: str,
     libreoffice_path: str = "",
 ) -> None:
-    """Insert or update exported CREPE variables in the user's shell profile."""
+    """Insert or update exported CREPE variables in the user's shell profile.
+
+    Only non-secret path variables are written here. The Tavily API key is
+    intentionally NOT exported to the shell profile -- it only ever goes into
+    ~/.config/goose/config.yaml, the one place Goose actually reads it, so the
+    secret doesn't end up in plaintext in two places.
+    """
     content = profile_path.read_text("utf-8") if profile_path.exists() else ""
 
     # Remove existing block if present
@@ -113,12 +119,8 @@ def update_shell_profile(
     content = content + "\n\n" if content else ""
 
     lines = [PROFILE_BLOCK_START]
-    if tavily_key:
-        lines.append(f'export CREPE_TAVILY_API_KEY="{tavily_key}"')
     if browser_path:
         lines.append(f'export CREPE_HEADLESS_BROWSER_PATH="{browser_path}"')
-    if aspose_license:
-        lines.append(f'export CREPE_ASPOSE_LICENSE_PATH="{aspose_license}"')
     if libreoffice_path:
         lines.append(f'export CREPE_LIBREOFFICE_PATH="{libreoffice_path}"')
     lines.append(PROFILE_BLOCK_END)
@@ -148,37 +150,48 @@ def remove_shell_profile_block(profile_path: Path) -> None:
 def update_goose_config(
     tavily_key: str = "",
     browser_path: str = "",
-    aspose_license: str = "",
     libreoffice_path: str = "",
-) -> None:
+) -> bool:
     """Register or update CREPE MCP server in `~/.config/goose/config.yaml` using Option 1.
 
     Uses `envs` (literal values), not `env_keys` (secret-store references) --
     Goose resolves every `env_keys` entry against its own keyring/secrets.yaml,
-    which this script never populates. Declaring optional vars there makes
-    Goose fail the whole extension with "Failed to fetch secret ... not found"
-    the moment one is unset (CREPE_ASPOSE_LICENSE_PATH being the common case,
-    since it's optional everywhere and unused on Linux entirely). `envs` just
-    passes the value through, or omits the key if there's nothing to pass.
+    which this script never populates. Declaring an unset optional var there
+    makes Goose fail the whole extension with "Failed to fetch secret ... not
+    found" the moment it's unset. `envs` just passes the value through, or
+    omits the key if there's nothing to pass.
+
+    Safety: this rewrites the user's *entire* config.yaml (it's the only way
+    to add one extension key with PyYAML), so two precautions apply:
+      - if the existing file fails to parse, we abort without writing rather
+        than silently replacing it with just the crepe entry (which would
+        destroy every other extension and setting the user has configured);
+      - a `.bak` copy of the existing file is written before any change.
+    The file is chmod'd 0600 afterwards since `envs` may now hold a plaintext
+    Tavily API key.
+
+    Returns True if the config was written, False if the write was aborted.
     """
     GOOSE_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    config: dict = {}
     if GOOSE_CONFIG_PATH.exists():
         try:
             with open(GOOSE_CONFIG_PATH, "r", encoding="utf-8") as f:
                 config = yaml.safe_load(f) or {}
         except Exception as e:
-            print(f"⚠️ Warning: Failed to parse {GOOSE_CONFIG_PATH}: {e}")
-            config = {}
-    else:
-        config = {}
+            print(f"❌ Failed to parse existing {GOOSE_CONFIG_PATH}: {e}")
+            print("   Aborting without writing, to avoid discarding your other extensions.")
+            print("   Fix or back up the file by hand, then re-run --install.")
+            return False
+        shutil.copy2(GOOSE_CONFIG_PATH, GOOSE_CONFIG_BACKUP_PATH)
+        os.chmod(GOOSE_CONFIG_BACKUP_PATH, 0o600)  # may carry a secret from a prior install
+        print(f"🗂️  Backed up existing config to {GOOSE_CONFIG_BACKUP_PATH}")
 
     envs = {}
     if tavily_key:
         envs["CREPE_TAVILY_API_KEY"] = tavily_key
     if browser_path:
         envs["CREPE_HEADLESS_BROWSER_PATH"] = browser_path
-    if aspose_license:
-        envs["CREPE_ASPOSE_LICENSE_PATH"] = aspose_license
     if libreoffice_path:
         envs["CREPE_LIBREOFFICE_PATH"] = libreoffice_path
 
@@ -197,7 +210,9 @@ def update_goose_config(
 
     with open(GOOSE_CONFIG_PATH, "w", encoding="utf-8") as f:
         yaml.safe_dump(config, f, sort_keys=False, allow_unicode=True)
-    print(f"✅ Registered CREPE MCP server in Goose config: {GOOSE_CONFIG_PATH}")
+    os.chmod(GOOSE_CONFIG_PATH, 0o600)
+    print(f"✅ Registered CREPE MCP server in Goose config: {GOOSE_CONFIG_PATH} (permissions set to 0600)")
+    return True
 
 
 def remove_from_goose_config() -> None:
@@ -207,7 +222,8 @@ def remove_from_goose_config() -> None:
     try:
         with open(GOOSE_CONFIG_PATH, "r", encoding="utf-8") as f:
             config = yaml.safe_load(f) or {}
-    except Exception:
+    except Exception as e:
+        print(f"⚠️ Warning: Failed to parse {GOOSE_CONFIG_PATH}: {e}. Leaving it untouched.")
         return
 
     extensions = config.get("extensions", {})
@@ -281,16 +297,7 @@ def run_install(args: argparse.Namespace) -> None:
     if not tavily_key:
         print("ℹ️ No Tavily API key set. `web_search` will return a friendly warning when invoked.")
 
-    # 4. Resolve Aspose License Path (fallback PPTX renderer, when LibreOffice isn't available)
-    aspose_lic = args.aspose_license or os.environ.get("CREPE_ASPOSE_LICENSE_PATH", "").strip()
-    if not aspose_lic and not args.non_interactive:
-        aspose_lic = interactive_prompt(
-            "Enter Aspose .lic file path for watermark-free PowerPoint export fallback (or press Enter to skip)"
-        )
-    if not aspose_lic:
-        print("ℹ️ Note: Aspose fallback (if ever used) runs in evaluation mode and watermarks output unless a valid .lic file path is set later.")
-
-    # 5. Resolve LibreOffice Path (preferred PPTX->PNG renderer; required on Linux)
+    # 4. Resolve LibreOffice Path (required on every platform -- no fallback)
     libreoffice_path = args.libreoffice_path or os.environ.get("CREPE_LIBREOFFICE_PATH", "").strip()
     if not libreoffice_path:
         detected_lo = find_libreoffice()
@@ -302,24 +309,31 @@ def run_install(args: argparse.Namespace) -> None:
                 libreoffice_path = detected_lo
         else:
             print(
-                "ℹ️ No native LibreOffice binary found. If it's installed as a Flatpak "
-                "(org.libreoffice.LibreOffice), no action needed — it's auto-detected at "
-                "runtime. Otherwise install LibreOffice, or leave unset to fall back to "
-                "aspose-slides (macOS only; required and unavailable on Linux without it)."
+                "⚠️ No LibreOffice binary found. LibreOffice is required for "
+                "render_slides_as_pngs(format='pptx') -- there is no fallback. Install it "
+                "(native package, e.g. libreoffice-impress; the macOS app; or "
+                "`flatpak install flathub org.libreoffice.LibreOffice`), or set "
+                "CREPE_LIBREOFFICE_PATH later if it's installed somewhere non-standard."
             )
             if not args.non_interactive:
                 libreoffice_path = interactive_prompt(
                     "Enter absolute path to your soffice/libreoffice executable (or press Enter to skip)"
                 )
 
-    # 6. Export variables to shell profile
+    # 5. Export non-secret variables to shell profile
     profile_path = detect_shell_profile()
-    update_shell_profile(profile_path, tavily_key, browser_path, aspose_lic, libreoffice_path)
+    update_shell_profile(profile_path, browser_path, libreoffice_path)
 
-    # 7. Update ~/.config/goose/config.yaml
-    update_goose_config(tavily_key, browser_path, aspose_lic, libreoffice_path)
+    # 6. Update ~/.config/goose/config.yaml -- the only place the Tavily key is stored
+    if not update_goose_config(tavily_key, browser_path, libreoffice_path):
+        sys.exit(1)
 
     print("\n🎉 CREPE MCP server installation completed successfully!")
+    if tavily_key:
+        print(
+            f"🔒 Your Tavily API key was written only to {GOOSE_CONFIG_PATH} (chmod 0600) "
+            "-- not to your shell profile."
+        )
     print(f"💡 To apply environment variables immediately in your current terminal, run:\n    source {profile_path}")
     print("💡 Goose Agent will automatically inherit `crepe` tools right from this repository (`uv run`).")
 
@@ -364,12 +378,6 @@ def main() -> None:
         type=str,
         default="",
         help="Path to Chromium/Chrome executable (`CREPE_HEADLESS_BROWSER_PATH`).",
-    )
-    parser.add_argument(
-        "--aspose-license",
-        type=str,
-        default="",
-        help="Path to Aspose `.lic` file (`CREPE_ASPOSE_LICENSE_PATH`).",
     )
     parser.add_argument(
         "--libreoffice-path",

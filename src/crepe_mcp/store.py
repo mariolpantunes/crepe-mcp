@@ -130,3 +130,43 @@ def get_slide_by_index(presentation: Presentation, index: int) -> Slide:
             f"(presentation has {len(presentation.slides)} slides)"
         )
     return presentation.slides[index]
+
+
+def delete_slide(presentation: Presentation, index: int) -> Slide:
+    """Remove and return the slide at *index*; later slides shift down."""
+    if index < 0 or index >= len(presentation.slides):
+        raise IndexError(
+            f"Slide index {index} out of range "
+            f"(presentation has {len(presentation.slides)} slides)"
+        )
+    return presentation.slides.pop(index)
+
+
+def insert_slide(
+    presentation: Presentation,
+    index: int,
+    title: str,
+    content: str,
+) -> Slide:
+    """Insert a new slide at *index*, shifting slides at/after it later.
+
+    index >= len(slides) inserts at the end, consistent with
+    upsert_slide's append-on-overflow behavior.
+    """
+    if index < 0:
+        raise ValueError(f"Slide index must be >= 0, got {index}")
+    slide = Slide(id=uuid.uuid4().hex[:8], title=title, content=content)
+    presentation.slides.insert(min(index, len(presentation.slides)), slide)
+    return slide
+
+
+def list_presentations() -> List[Presentation]:
+    return list(PRESENTATIONS.values())
+
+
+def update_metadata(presentation: Presentation, **fields: str | None) -> Metadata:
+    """Update only the metadata fields passed with a non-None value."""
+    for key, value in fields.items():
+        if value is not None:
+            setattr(presentation.metadata, key, value)
+    return presentation.metadata

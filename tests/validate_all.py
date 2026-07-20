@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 """Comprehensive end-to-end validation test harness for the CREPE MCP server.
 
-Runs all 12 tools across Group A (Stateful Presentation Builder) and Group B
+Runs all 15 tools across Group A (Stateful Presentation Builder) and Group B
 (Research & Web Utilities), asserting expected structure, error/warning handling,
 and physical file creation (.pdf, .pptx, and .png sequences).
 """
 from __future__ import annotations
 
 import os
-os.environ.setdefault("DOTNET_SYSTEM_GLOBALIZATION_INVARIANT", "1")
 import shutil
 import sys
 from pathlib import Path
@@ -147,7 +146,80 @@ def main() -> None:
         "Verified updated math equation in Slide 1",
     )
 
-    # 5. compile_presentation (PDF)
+    # 5. set_slide insert=True (mid-deck insertion, shifts later slides)
+    print("\nInserting a slide at index 1 (insert=True)...")
+    res_insert = call_tool(
+        server.set_slide,
+        presentation_id=pres_id,
+        index=1,
+        title="Inserted Mid-Deck",
+        content="- This slide was inserted, not replaced",
+        insert=True,
+    )
+    print_check(
+        "set_slide insert=True shifts later slides and grows the deck",
+        res_insert.get("action") == "inserted"
+        and res_insert.get("index") == 1
+        and res_insert.get("slide_count") == 4,
+        f"action={res_insert.get('action')}, slide_count={res_insert.get('slide_count')}",
+    )
+    res_shifted = call_tool(server.get_slide, presentation_id=pres_id, slide_index=2)
+    print_check(
+        "Slide previously at index 1 shifted to index 2 after insert",
+        res_shifted.get("title") == "Layouts & Updated Math",
+        f"title at index 2: {res_shifted.get('title')!r}",
+    )
+
+    # 6. delete_slide (removes the inserted slide, shifts the rest back down)
+    print("\nDeleting the inserted slide at index 1...")
+    res_delete = call_tool(server.delete_slide, presentation_id=pres_id, index=1)
+    print_check(
+        "delete_slide removes the slide and shrinks the deck",
+        res_delete.get("success") is True
+        and res_delete.get("deleted_title") == "Inserted Mid-Deck"
+        and res_delete.get("slide_count") == 3,
+        f"deleted_title={res_delete.get('deleted_title')!r}, slide_count={res_delete.get('slide_count')}",
+    )
+    res_restored = call_tool(server.get_slide, presentation_id=pres_id, slide_index=1)
+    print_check(
+        "Slide at index 1 shifted back after delete",
+        res_restored.get("title") == "Layouts & Updated Math",
+        f"title at index 1: {res_restored.get('title')!r}",
+    )
+    res_delete_bad = call_tool(server.delete_slide, presentation_id=pres_id, index=99)
+    print_check(
+        "delete_slide on an out-of-range index returns a clean error",
+        res_delete_bad.get("success") is False,
+        f"error={res_delete_bad.get('error')!r}",
+    )
+
+    # 7. update_presentation_metadata (partial update, other fields untouched)
+    print("\nUpdating only the presentation title...")
+    res_meta = call_tool(
+        server.update_presentation_metadata,
+        presentation_id=pres_id,
+        title="Validation Suite Deck (Updated)",
+    )
+    print_check(
+        "update_presentation_metadata changes only the requested field",
+        res_meta.get("success") is True
+        and res_meta.get("metadata", {}).get("title") == "Validation Suite Deck (Updated)"
+        and res_meta.get("metadata", {}).get("subtitle") == "Automated Testing"
+        and res_meta.get("metadata", {}).get("author") == "CREPE Harness",
+        f"metadata={res_meta.get('metadata')}",
+    )
+
+    # 8. list_presentations (finds the open presentation before cleanup)
+    print("\nListing open presentations...")
+    res_list = call_tool(server.list_presentations)
+    listed_ids = [p.get("presentation_id") for p in res_list.get("presentations", [])]
+    print_check(
+        "list_presentations includes the presentation currently being built",
+        pres_id in listed_ids,
+        f"open presentation_ids: {listed_ids}",
+    )
+
+    # 9. compile_presentation (PDF)
     pdf_output = f"/tmp/crepe_val_{pres_id}.pdf"
     print(f"\nCompiling presentation to Beamer PDF ({pdf_output})...")
     res_pdf = call_tool(
@@ -163,7 +235,7 @@ def main() -> None:
         f"PDF size: {os.path.getsize(pdf_output)} bytes",
     )
 
-    # 6. render_slides_as_pngs (PDF -> PNG via pymupdf)
+    # 10. render_slides_as_pngs (PDF -> PNG via pymupdf)
     pdf_png_dir = f"/tmp/crepe_val_{pres_id}_pdf_slides"
     print(f"\nRendering PDF slides as PNGs to {pdf_png_dir}...")
     res_pdf_png = call_tool(
@@ -183,7 +255,7 @@ def main() -> None:
         f"Generated {len(png_files)} PNGs, page_count={res_pdf_png.get('page_count')}",
     )
 
-    # 7. compile_presentation (PPTX)
+    # 11. compile_presentation (PPTX)
     pptx_output = f"/tmp/crepe_val_{pres_id}.pptx"
     print(f"\nCompiling presentation to PowerPoint PPTX ({pptx_output})...")
     res_pptx = call_tool(
@@ -198,11 +270,9 @@ def main() -> None:
         f"PPTX size: {os.path.getsize(pptx_output)} bytes",
     )
 
-    # 8. render_slides_as_pngs (PPTX -> PNG via LibreOffice, or aspose-slides fallback)
+    # 12. render_slides_as_pngs (PPTX -> PNG via LibreOffice; required on every platform)
     pptx_png_dir = f"/tmp/crepe_val_{pres_id}_pptx_slides"
     print(f"\nRendering PPTX slides as PNGs to {pptx_png_dir}...")
-    # Make sure ASPOSE license is not set to verify warning return on the aspose fallback path
-    os.environ.pop("CREPE_ASPOSE_LICENSE_PATH", None)
     res_pptx_png = call_tool(
         server.render_slides_as_pngs,
         presentation_id=pres_id,
@@ -214,29 +284,17 @@ def main() -> None:
     if res_pptx_png.get("success") is True:
         converter = res_pptx_png.get("converter")
         print_check(
-            "render_slides_as_pngs format=pptx (libreoffice or aspose-slides)",
-            converter in ("libreoffice", "aspose-slides")
+            "render_slides_as_pngs format=pptx (libreoffice)",
+            converter == "libreoffice"
             and len(pptx_png_files) >= 3
             and all(os.path.isfile(p) and os.path.getsize(p) > 0 for p in pptx_png_files),
             f"Generated {len(pptx_png_files)} PNGs via {converter}",
         )
-        if converter == "aspose-slides":
-            print_check(
-                "Aspose evaluation warning returned when CREPE_ASPOSE_LICENSE_PATH is unset",
-                "Aspose is running in evaluation mode" in res_pptx_png.get("warning", ""),
-                f"warning='{res_pptx_png.get('warning')}'",
-            )
-        else:
-            print_check(
-                "LibreOffice path returns no evaluation/watermark warning",
-                res_pptx_png.get("warning") is None,
-                f"warning={res_pptx_png.get('warning')!r}",
-            )
     else:
         err_msg = res_pptx_png.get("error", "")
         print_check(
-            "render_slides_as_pngs format=pptx cleanly reports missing LibreOffice on Linux "
-            "instead of crashing the process (no aspose fallback on Linux by design)",
+            "render_slides_as_pngs format=pptx cleanly reports missing LibreOffice "
+            "instead of crashing the process (no fallback, by design)",
             "LibreOffice is required" in err_msg,
             f"Clean error returned: {err_msg[:160]}...",
         )
@@ -249,7 +307,7 @@ def main() -> None:
     if os.path.isfile(pptx_output):
         os.remove(pptx_output)
 
-    # 9. cleanup_presentation
+    # 13. cleanup_presentation
     print("\nCleaning up presentation workdir...")
     workdir = server._get_pres(pres_id).workdir
     res_cleanup = call_tool(server.cleanup_presentation, presentation_id=pres_id)
@@ -264,10 +322,17 @@ def main() -> None:
         res_cleanup_again.get("success") is False and "Unknown presentation_id" in res_cleanup_again.get("error", ""),
         f"error='{res_cleanup_again.get('error')}'",
     )
+    res_list_after = call_tool(server.list_presentations)
+    listed_ids_after = [p.get("presentation_id") for p in res_list_after.get("presentations", [])]
+    print_check(
+        "list_presentations no longer includes a cleaned-up presentation",
+        pres_id not in listed_ids_after,
+        f"open presentation_ids: {listed_ids_after}",
+    )
 
     print_section("STAGE 3: GROUP B (RESEARCH & WEB UTILITIES)")
 
-    # 10. web_search (Graceful warning check without key)
+    # 14. web_search (Graceful warning check without key)
     print("Testing web_search without CREPE_TAVILY_API_KEY...")
     os.environ.pop("CREPE_TAVILY_API_KEY", None)
     res_web = call_tool(server.web_search, query="MCP protocol updates")
@@ -277,7 +342,7 @@ def main() -> None:
         f"warning='{res_web.get('warning')}'",
     )
 
-    # 11. wikipedia_search & wikipedia_read
+    # 15. wikipedia_search & wikipedia_read
     print("\nTesting wikipedia_search & wikipedia_read...")
     res_wiki_s = call_tool(server.wikipedia_search, query="Pandoc", limit=2)
     wiki_results = res_wiki_s.get("results", [])
@@ -295,7 +360,7 @@ def main() -> None:
         f"Extracted {len(res_wiki_r.get('content', ''))} chars for '{wiki_title}'",
     )
 
-    # 12. academic_search
+    # 16. academic_search
     print("\nTesting academic_search (Semantic Scholar)...")
     res_acad = call_tool(server.academic_search, query="agentic coding large language models", limit=2)
     papers = res_acad.get("papers", [])
@@ -306,7 +371,7 @@ def main() -> None:
         f"Papers retrieved: {len(papers)} | error: '{res_acad.get('error', '')}'",
     )
 
-    # 13. fetch_webpage (urllib fallback check)
+    # 17. fetch_webpage (urllib fallback check)
     print("\nTesting fetch_webpage (urllib fallback mode)...")
     os.environ.pop("CREPE_HEADLESS_BROWSER_PATH", None)
     res_fetch = call_tool(server.fetch_webpage, url="https://example.com", max_chars=1000)
@@ -316,7 +381,14 @@ def main() -> None:
         f"Extracted content length: {len(res_fetch.get('content', ''))} | warning present: {bool(res_fetch.get('warning'))}",
     )
 
-    print_section("ALL 12 TOOLS SUCCESSFULLY VALIDATED!")
+    res_fetch_file = call_tool(server.fetch_webpage, url="file:///etc/passwd", max_chars=1000)
+    print_check(
+        "fetch_webpage rejects non-http(s) schemes (e.g. file://) instead of disclosing local files",
+        res_fetch_file.get("content", "") == "" and "Unsupported URL scheme" in res_fetch_file.get("error", ""),
+        f"error='{res_fetch_file.get('error')}'",
+    )
+
+    print_section("ALL 15 TOOLS SUCCESSFULLY VALIDATED!")
 
 
 if __name__ == "__main__":
