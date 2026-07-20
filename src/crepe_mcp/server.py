@@ -284,8 +284,18 @@ def compile_presentation(
     ----------
     output_path     : Absolute destination path.
     format          : 'pdf' → Beamer/lualatex. 'pptx' → PowerPoint.
-    theme           : Beamer theme (PDF only, default 'moloch').
-                      Alternatives: 'default', 'metropolis', 'Madrid', 'Berlin'.
+    theme           : Any Beamer theme name installed on this system (PDF
+                      only) -- passed through to pandoc/LaTeX unvalidated,
+                      not limited to a fixed list. Defaults to 'moloch'
+                      (a Metropolis-inspired dark theme), which is already
+                      the default and needs no special handling to use.
+                      A few other commonly available names: 'default',
+                      'metropolis', 'Madrid', 'Berlin', 'Warsaw',
+                      'AnnArbor'. If a theme name isn't installed, pandoc's
+                      LaTeX error will say so in this tool's error message
+                      -- there's no need to hand-write Beamer LaTeX and
+                      compile it outside this tool to use an unlisted
+                      theme; just pass its name here.
     highlight_style : Code highlight style (PDF only, default 'tango').
     reference_doc   : Path to a .pptx template (PPTX only, optional).
     """

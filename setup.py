@@ -14,6 +14,7 @@ import getpass
 import os
 import re
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 from typing import Optional
@@ -94,6 +95,27 @@ def find_libreoffice() -> Optional[str]:
     if os.path.isfile(macos_path) and os.access(macos_path, os.X_OK):
         return macos_path
     return None
+
+
+def has_flatpak_libreoffice() -> bool:
+    """Detect a Flatpak install of LibreOffice (Linux only). Returns a bool, never a path.
+
+    Flatpak apps aren't invoked via a single executable file, so there's
+    nothing valid to put in CREPE_LIBREOFFICE_PATH (the server's runtime
+    override check requires os.path.isfile()). The server auto-detects and
+    invokes Flatpak LibreOffice itself, with no configuration needed -- this
+    is only used to give an accurate status message during install.
+    """
+    if not sys.platform.startswith("linux") or not shutil.which("flatpak"):
+        return False
+    try:
+        result = subprocess.run(
+            ["flatpak", "info", "org.libreoffice.LibreOffice"],
+            capture_output=True, timeout=10,
+        )
+        return result.returncode == 0
+    except Exception:
+        return False
 
 
 def update_shell_profile(
@@ -307,9 +329,16 @@ def run_install(args: argparse.Namespace) -> None:
                 libreoffice_path = interactive_prompt("Confirm or override LibreOffice path", detected_lo)
             else:
                 libreoffice_path = detected_lo
+        elif has_flatpak_libreoffice():
+            print(
+                "🔍 Found LibreOffice installed as a Flatpak (org.libreoffice.LibreOffice) -- "
+                "no action needed here, the server auto-detects and invokes it at runtime. "
+                "(It can't be written to CREPE_LIBREOFFICE_PATH: that variable expects a single "
+                "executable file, and a Flatpak app isn't invoked as one.)"
+            )
         else:
             print(
-                "⚠️ No LibreOffice binary found. LibreOffice is required for "
+                "⚠️ No LibreOffice binary found (native or Flatpak). LibreOffice is required for "
                 "render_slides_as_pngs(format='pptx') -- there is no fallback. Install it "
                 "(native package, e.g. libreoffice-impress; the macOS app; or "
                 "`flatpak install flathub org.libreoffice.LibreOffice`), or set "

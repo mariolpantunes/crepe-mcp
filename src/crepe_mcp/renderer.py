@@ -24,7 +24,11 @@ HEADER_INCLUDES = [
     r"\AtBeginEnvironment{Highlighting}{\scriptsize}",
 ]
 
-# Default Beamer theme options (PDF output only).
+# Beamer theme options (PDF output only). These are Metropolis-family
+# features (moloch is a Metropolis fork) -- unconditionally passing them to
+# a classic theme (e.g. 'default', 'Warsaw') raises a LaTeX "Option clash"
+# error, so they're only applied for themes that actually support them.
+METROPOLIS_FAMILY_THEMES = {"moloch", "metropolis"}
 DEFAULT_THEME_OPTIONS = [
     "sectionpage=progressbar",
     "numbering=fraction",
@@ -46,7 +50,7 @@ def build_config_yaml(
         "institute": meta.institute,
         "date": meta.date,
         "theme": theme,
-        "themeoptions": DEFAULT_THEME_OPTIONS,
+        "themeoptions": DEFAULT_THEME_OPTIONS if theme in METROPOLIS_FAMILY_THEMES else [],
         "highlight-style": highlight_style,
         "colorlinks": True,
         "mainfont": "Noto Sans",
