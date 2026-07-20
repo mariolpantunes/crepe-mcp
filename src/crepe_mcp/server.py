@@ -65,19 +65,9 @@ def create_presentation(
     institute: str = "Universidade de Aveiro",
     date: str = "2026",
 ) -> dict:
-    """Create a new, empty presentation and return its presentation_id.
-
-    All title-slide metadata is set here. Every other Group-A tool requires
-    the presentation_id returned by this call.
-
-    Parameters
-    ----------
-    title     : Main title shown on the title slide.
-    subtitle  : Optional subtitle.
-    author    : Author name (default: Mário Antunes).
-    institute : Institution name (default: Universidade de Aveiro).
-    date      : Date string shown on the title slide (default: 2026).
-    """
+    """Create a new, empty presentation; returns presentation_id, required by
+    every other Group-A tool. All title-slide metadata is set here: title,
+    optional subtitle, author, institute, date."""
     pres = new_presentation(
         title=title, subtitle=subtitle, author=author,
         institute=institute, date=date,
@@ -87,11 +77,8 @@ def create_presentation(
 
 @mcp.tool
 def get_presentation(presentation_id: str) -> dict:
-    """Return the current state of a presentation.
-
-    Returns metadata, an ordered slide list (index, id, title, 200-char
-    content preview), and which compiled artifacts exist.
-    """
+    """Return a presentation's metadata, ordered slide list (index, id,
+    title, 200-char content preview), and which compiled artifacts exist."""
     try:
         pres = _get_pres(presentation_id)
     except ValueError as exc:
@@ -144,37 +131,18 @@ def set_slide(
 ) -> dict:
     """Add, replace, or insert a slide.
 
-    insert=False (default):
-      index < current slide count  → replace the slide at that position.
-      index >= current slide count → append a new slide at the end.
+    insert=False (default): index < slide count -> replace in place;
+    index >= slide count -> append.
+    insert=True: inserts at index, shifting that slide and everything after
+    it later (index >= slide count still appends). Combine with
+    delete_slide to move a slide to a new position.
 
-    insert=True:
-      Inserts a new slide at index, shifting that slide and everything
-      after it one position later. index >= current slide count still
-      appends. Combine with delete_slide to move a slide to a new
-      position (delete it, then insert it elsewhere).
-
-    `content` is the raw Pandoc Markdown body for the slide. Supported syntax:
-
-    Bullet list          : - item
-    Incremental bullets  : > - item
-    Math block           : $$ E = mc^2 $$
-    Inline math          : $f(x)$
-    Code block           : ```python\\ncode\\n```
-    Image                : ![caption](/absolute/path/to/image.png)
-    Speaker notes        : ::: notes\\ntext\\n:::
-    Section divider (TOC): # Heading as the only content line
-
-    Multi-column layout (embed fenced-div directly in content):
-
-        :::: {.columns}
-        ::: {.column width="50%"}
-        Left content
-        :::
-        ::: {.column width="50%"}
-        Right content
-        :::
-        ::::
+    `content` is raw Pandoc Markdown -- standard bullets/code/images/math
+    all work as expected. Less-obvious Pandoc/Beamer conventions:
+      Incremental bullets : > - item
+      Speaker notes        : ::: notes\\ntext\\n:::
+      Section divider      : content is ONLY "# Section Title", nothing else
+      Two-column layout    : :::: {.columns}\\n::: {.column width="50%"}\\nLeft\\n:::\\n::: {.column width="50%"}\\nRight\\n:::\\n::::
     """
     try:
         pres = _get_pres(presentation_id)
@@ -225,12 +193,10 @@ def update_presentation_metadata(
     institute: Optional[str] = None,
     date: Optional[str] = None,
 ) -> dict:
-    """Update title-slide metadata on an existing presentation.
-
-    Only fields passed a value are changed; omitted (None) fields keep
-    their current value. Use this instead of recreating a presentation
-    just to fix a typo in the title after slides have already been added.
-    """
+    """Update title-slide metadata on an existing presentation. Only fields
+    given a value are changed; others keep their current value -- use this
+    instead of recreating a presentation to fix a title typo after slides
+    already exist."""
     try:
         pres = _get_pres(presentation_id)
         metadata = _update_metadata(
@@ -249,13 +215,10 @@ def update_presentation_metadata(
 
 @mcp.tool
 def list_presentations() -> dict:
-    """List every presentation currently held in memory.
-
-    Presentations stay in memory (and keep their on-disk scratch dir)
-    until cleanup_presentation is called or the process exits. Use this
-    to recover a presentation_id you've lost track of, or to find stale
-    presentations worth cleaning up.
-    """
+    """List every presentation currently held in memory (state and its
+    on-disk scratch dir persist until cleanup_presentation or process
+    exit). Use this to recover a lost presentation_id or find stale
+    presentations to clean up."""
     presentations = [
         {
             "presentation_id": pres.id,
@@ -275,22 +238,17 @@ def export_presentation_source(
     theme: str = "moloch",
     highlight_style: str = "tango",
 ) -> dict:
-    """Return the exact pandoc source this presentation compiles from.
+    """Return the exact pandoc source (slides Markdown + config.yml) this
+    presentation compiles from -- built with the same functions
+    compile_presentation uses, so it's byte-identical. Presentations only
+    live in memory (lost on restart or cleanup_presentation) with no other
+    durable copy, so this is how to save or inspect the source before that
+    happens.
 
-    Presentations only live in memory -- state is lost on server restart or
-    cleanup_presentation, with no other durable copy. This returns the same
-    slides Markdown and config.yml metadata/theme block that
-    compile_presentation actually feeds to pandoc (byte-for-byte, since it's
-    built with the same functions), so it can be inspected, diffed, or saved
-    outside the tool before that state disappears.
-
-    Parameters
-    ----------
-    output_dir      : If given (absolute path), also writes slides.md and
-                       config.yml there (directory created if needed).
-    theme / highlight_style : Same meaning as compile_presentation. Not
-                       stored on the presentation -- pass whatever you last
-                       compiled with to get a matching config.yml.
+    output_dir : if given (absolute path), also writes slides.md/config.yml
+    there. theme/highlight_style : same meaning as compile_presentation;
+    not stored on the presentation, so pass whatever you compiled with to
+    get a matching config.yml.
     """
     try:
         pres = _get_pres(presentation_id)
@@ -329,27 +287,18 @@ def import_presentation_source(
     markdown: Optional[str] = None,
     source_path: Optional[str] = None,
 ) -> dict:
-    """Replace a presentation's slides by parsing pandoc slide Markdown.
+    """Replace a presentation's slides by parsing pandoc slide Markdown --
+    the inverse of export_presentation_source. Splits on '##' (slide) and
+    bare '#' (section-divider) headings, ignoring '#' inside fenced code
+    blocks so a code comment is never mistaken for a heading. Use this to
+    restore an exported deck or bulk-load a hand-edited Markdown file in
+    one call instead of many set_slide calls.
 
-    Reverses export_presentation_source: splits the given Markdown on '##'
-    (slide) and bare '#' (section-divider) headings -- ignoring '#'
-    characters inside fenced code blocks, so a comment like '# TODO' in a
-    code sample is never mistaken for a heading -- and replaces every slide
-    currently in the presentation with the parsed result. Use this to
-    restore a deck exported earlier, or to bulk-load a hand-edited Markdown
-    file in one call instead of many set_slide calls.
-
-    presentation_id must already exist (call create_presentation first);
-    this populates an existing presentation rather than creating a new one.
-    Metadata (title/author/...) is untouched -- use
-    update_presentation_metadata separately if needed.
-
-    Exactly one of markdown or source_path must be given.
-
-    markdown    : Inline Markdown content.
-    source_path : Absolute path to a .md file to read instead (e.g. one
-                  written by export_presentation_source, or a hand-edited
-                  copy of one).
+    presentation_id must already exist (create_presentation first) --
+    every slide it currently has is replaced; metadata is untouched.
+    Exactly one of markdown (inline content) or source_path (absolute path
+    to a .md file, e.g. one written by export_presentation_source) must be
+    given.
     """
     if (markdown is None) == (source_path is None):
         return {"success": False, "error": "Pass exactly one of markdown or source_path."}
@@ -392,29 +341,19 @@ def compile_presentation(
     highlight_style: str = "tango",
     reference_doc: Optional[str] = None,
 ) -> dict:
-    """Compile the in-memory presentation to PDF or PPTX.
+    """Compile the in-memory presentation to PDF or PPTX, writing directly
+    to output_path (absolute). Call render_slides_as_pngs afterwards to
+    validate visually.
 
-    Writes the output directly to `output_path`. Call render_slides_as_pngs
-    afterwards to produce a PNG sequence for visual validation.
-
-    Parameters
-    ----------
-    output_path     : Absolute destination path.
-    format          : 'pdf' → Beamer/lualatex. 'pptx' → PowerPoint.
-    theme           : Any Beamer theme name installed on this system (PDF
-                      only) -- passed through to pandoc/LaTeX unvalidated,
-                      not limited to a fixed list. Defaults to 'moloch'
-                      (a Metropolis-inspired dark theme), which is already
-                      the default and needs no special handling to use.
-                      A few other commonly available names: 'default',
-                      'metropolis', 'Madrid', 'Berlin', 'Warsaw',
-                      'AnnArbor'. If a theme name isn't installed, pandoc's
-                      LaTeX error will say so in this tool's error message
-                      -- there's no need to hand-write Beamer LaTeX and
-                      compile it outside this tool to use an unlisted
-                      theme; just pass its name here.
-    highlight_style : Code highlight style (PDF only, default 'tango').
-    reference_doc   : Path to a .pptx template (PPTX only, optional).
+    format : 'pdf' (Beamer/lualatex) or 'pptx' (PowerPoint).
+    theme  : any Beamer theme installed on this system (PDF only) --
+    passed through to pandoc/LaTeX unvalidated, not a fixed list. Default
+    'moloch' already works with no special handling; other options include
+    'metropolis', 'Madrid', 'Berlin', 'default', 'Warsaw'. An invalid name
+    surfaces as a LaTeX error in this tool's response -- no need to
+    hand-write/compile Beamer LaTeX outside this tool for an unlisted theme.
+    highlight_style : code highlight style, default 'tango'.
+    reference_doc   : path to a .pptx template (PPTX only, optional).
     """
     if format not in ("pdf", "pptx"):
         return {"success": False, "error": f"format must be 'pdf' or 'pptx', got {format!r}"}
@@ -453,21 +392,11 @@ def render_slides_as_pngs(
     output_dir: Optional[str] = None,
     dpi: int = 150,
 ) -> dict:
-    """Convert a compiled artifact to a PNG sequence for visual validation.
-
-    The PNG output reflects the actual compiled format — Beamer PDF and PPTX
-    look completely different and cannot substitute for each other.
-
-    Parameters
-    ----------
-    format     : 'pdf' or 'pptx' — must match a previously compiled artifact.
-    output_dir : Directory to write PNGs. Defaults to <artifact_path>.slides/
-    dpi        : Render resolution (default 150).
-
-    PDF  path : pymupdf — pure Python, no system deps.
-    PPTX path : LibreOffice headless (required — see README for install
-                instructions on your platform).
-    """
+    """Convert a compiled artifact to a numbered PNG sequence for visual
+    validation. format must match a previously compiled artifact -- PDF
+    (pymupdf) and PPTX (LibreOffice headless, required, no fallback) render
+    differently and can't substitute for each other. output_dir defaults
+    to <artifact_path>.slides/; dpi default 150."""
     if format not in ("pdf", "pptx"):
         return {"success": False, "error": f"format must be 'pdf' or 'pptx', got {format!r}"}
     try:
@@ -515,12 +444,10 @@ def render_slides_as_pngs(
 
 @mcp.tool
 def cleanup_presentation(presentation_id: str) -> dict:
-    """Delete a presentation's in-memory state and its on-disk scratch directory.
-
-    Call this once a deck's compiled artifacts (PDF/PPTX/PNGs) have been
-    delivered to the user — the server keeps every presentation's workdir on
-    disk until this is called or the process exits.
-    """
+    """Delete a presentation's in-memory state and on-disk scratch dir.
+    Call once its compiled artifacts (PDF/PPTX/PNGs) have been delivered --
+    otherwise the workdir persists until this is called or the process
+    exits."""
     try:
         _delete_pres(presentation_id)
     except ValueError as exc:
@@ -574,17 +501,9 @@ def wikipedia_read(title: str, max_chars: int = 15000) -> dict:
 
 @mcp.tool
 def fetch_webpage(url: str, max_chars: int = 15000) -> dict:
-    """Extract readable plain text from a URL.
-
-    Uses the browser at CREPE_HEADLESS_BROWSER_PATH (--headless=new --dump-dom)
-    when set. Falls back to urllib + HTML stripping with a warning if the
-    variable is unset or points to a missing file.
-
-    Example values for CREPE_HEADLESS_BROWSER_PATH:
-      /usr/bin/chromium
-      /usr/bin/google-chrome
-      /Applications/Brave Browser.app/Contents/MacOS/Brave Browser
-    """
+    """Extract readable plain text from a URL (http/https only). Uses the
+    browser at CREPE_HEADLESS_BROWSER_PATH (--headless=new --dump-dom) if
+    set, else falls back to urllib + HTML stripping with a warning."""
     return research.fetch_webpage(url, max_chars=max_chars)
 
 
