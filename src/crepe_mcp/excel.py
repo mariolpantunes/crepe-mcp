@@ -61,8 +61,8 @@ def create_excel(
         s_name = s_info.get("name", "Sheet1")
         ws = wb.create_sheet(title=s_name)
 
-        headers = s_info.get("headers", [])
-        rows = s_info.get("rows", [])
+        headers = s_info.get("headers") or []
+        rows = s_info.get("rows") or []
 
         if headers:
             ws.append(headers)
@@ -106,6 +106,7 @@ def create_excel(
 
 def inspect_excel(input_path: str, max_rows: int = 100) -> dict:
     """Inspect an existing .xlsx file and return sheets, dimensions, cell values, and formulas."""
+    max_rows = max(1, max_rows)
     if not os.path.isabs(input_path):
         return {"success": False, "error": f"input_path must be an absolute path, got {input_path!r}"}
     if not os.path.isfile(input_path):

@@ -173,23 +173,29 @@ def has_flatpak_libreoffice() -> bool:
 
 
 def find_drawio() -> str | None:
-    """Auto-detect a native or flatpak draw.io binary or the macOS app bundle."""
-    for binary in ("drawio", "draw.io"):
-        found = which_binary(binary)
-        if found:
-            return found
-
-    flatpak_paths = [
-        str(Path.home() / ".local/share/flatpak/exports/bin/com.jgraph.drawio.desktop"),
-        "/var/lib/flatpak/exports/bin/com.jgraph.drawio.desktop",
-    ]
-    for p in flatpak_paths:
-        if os.path.isfile(p) and os.access(p, os.X_OK):
-            return p
+    """Auto-detect a native draw.io binary (PATH, SlackBuild /opt paths), macOS app bundle, or flatpak."""
+    for binary in ("drawio", "draw.io", "/opt/drawio/drawio", "/opt/draw.io/drawio"):
+        if "/" in binary:
+            if os.path.isfile(binary) and os.access(binary, os.X_OK):
+                return binary
+        else:
+            found = which_binary(binary)
+            if found:
+                return found
 
     macos_path = "/Applications/draw.io.app/Contents/MacOS/draw.io"
     if os.path.isfile(macos_path) and os.access(macos_path, os.X_OK):
         return macos_path
+
+    if has_flatpak_drawio():
+        flatpak_paths = [
+            str(Path.home() / ".local/share/flatpak/exports/bin/com.jgraph.drawio.desktop"),
+            "/var/lib/flatpak/exports/bin/com.jgraph.drawio.desktop",
+        ]
+        for p in flatpak_paths:
+            if os.path.isfile(p) and os.access(p, os.X_OK):
+                return p
+
     return None
 
 

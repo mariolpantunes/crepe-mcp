@@ -42,6 +42,7 @@ _playwright_browser: Any = None
 
 def academic_search(query: str, limit: int = 5) -> dict:
     """Search Semantic Scholar for academic papers. Reads CREPE_SEMANTIC_SCHOLAR_API_KEY if set."""
+    limit = max(1, min(limit, 100))
     encoded = urllib.parse.quote(query)
     url = (
         f"https://api.semanticscholar.org/graph/v1/paper/search"
@@ -87,6 +88,7 @@ def academic_search(query: str, limit: int = 5) -> dict:
 
 def arxiv_search(query: str, limit: int = 5) -> dict:
     """Search arXiv for preprints via Atom XML API."""
+    limit = max(1, min(limit, 100))
     encoded = urllib.parse.quote(query)
     url = f"https://export.arxiv.org/api/query?search_query=all:{encoded}&start=0&max_results={limit}"
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (compatible; CREPE/1.0)"})
@@ -132,6 +134,7 @@ def arxiv_search(query: str, limit: int = 5) -> dict:
 
 def web_search(query: str, max_results: int = 5) -> dict:
     """Search the web using Tavily. Returns a warning if key is absent."""
+    max_results = max(1, min(max_results, 50))
     api_key = os.environ.get("CREPE_TAVILY_API_KEY", "").strip()
     if not api_key:
         return {
@@ -178,6 +181,7 @@ def web_search(query: str, max_results: int = 5) -> dict:
 
 def wikipedia_search(query: str, limit: int = 3) -> dict:
     """Search Wikipedia; return titles, URLs, and excerpts."""
+    limit = max(1, min(limit, 50))
     encoded = urllib.parse.quote(query)
     url = (
         f"https://en.wikipedia.org/w/api.php"

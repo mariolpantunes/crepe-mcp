@@ -85,15 +85,9 @@ def find_drawio() -> list[str] | None:
 
     Priority:
       1. CREPE_DRAWIO_PATH env var (must be an executable file).
-      2. 'drawio' or 'draw.io' on PATH.
+      2. 'drawio' or 'draw.io' on PATH or SlackBuild location (/opt/drawio/drawio).
       3. macOS app bundle.
-      4. Flatpak com.jgraph.drawio.desktop (Linux only).
-
-    Returns None in two distinct cases:
-      - CREPE_DRAWIO_PATH is set but the path is not a valid executable
-        (callers should surface this explicitly — see _drawio_not_found_error).
-      - draw.io is simply not installed anywhere.
-    Use _drawio_not_found_error() to generate the appropriate error message.
+      4. Flatpak com.jgraph.drawio.desktop (Linux only, verified installed).
     """
     override = os.environ.get("CREPE_DRAWIO_PATH", "").strip()
     if override:
@@ -108,16 +102,19 @@ def find_drawio() -> list[str] | None:
                         return ["flatpak", "run", "--filesystem=host", "--filesystem=/tmp", "com.jgraph.drawio.desktop"]
                 except Exception:
                     pass
-            return None
-        if os.path.isfile(override) and os.access(override, os.X_OK):
+        elif os.path.isfile(override) and os.access(override, os.X_OK):
             return [override]
-        # Configured but not valid — don't silently fall through.
-        return None
+        else:
+            return None
 
-    for binary in ("drawio", "draw.io"):
-        found = shutil.which(binary)
-        if found:
-            return [found]
+    for binary in ("drawio", "draw.io", "/opt/drawio/drawio", "/opt/draw.io/drawio"):
+        if "/" in binary:
+            if os.path.isfile(binary) and os.access(binary, os.X_OK):
+                return [binary]
+        else:
+            found = shutil.which(binary)
+            if found:
+                return [found]
 
     macos_path = "/Applications/draw.io.app/Contents/MacOS/draw.io"
     if os.path.isfile(macos_path) and os.access(macos_path, os.X_OK):

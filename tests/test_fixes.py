@@ -513,6 +513,34 @@ class TestT09SubServerExports(unittest.TestCase):
         self.assertEqual(len(asyncio.run(diag_mcp.list_tools())), 3)
 
 
+class TestT10RobustnessAndNativeDrawio(unittest.TestCase):
+    """T-10: Native SlackBuild draw.io discovery and input robustness in research/excel."""
+
+    def test_find_drawio_finds_native_binary(self):
+        from crepe_mcp.drawio import find_drawio
+        # If /usr/bin/drawio or /opt/drawio/drawio is on the machine, find_drawio should discover it
+        cmd = find_drawio()
+        if os.path.isfile("/usr/bin/drawio") or os.path.isfile("/opt/drawio/drawio"):
+            self.assertIsNotNone(cmd)
+            self.assertTrue(any("drawio" in part for part in cmd))
+
+    def test_create_excel_with_none_headers_and_rows(self):
+        import tempfile
+
+        from crepe_mcp.excel import create_excel
+        with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as f:
+            tmp_path = f.name
+        try:
+            res = create_excel(
+                output_path=tmp_path,
+                sheets=[{"name": "NullTest", "headers": None, "rows": None}],
+                overwrite=True,
+            )
+            self.assertTrue(res.get("success"), f"create_excel should succeed with None headers/rows: {res}")
+        finally:
+            if os.path.isfile(tmp_path):
+                os.remove(tmp_path)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
