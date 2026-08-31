@@ -83,14 +83,13 @@ def read_drawio_bytes(path: str) -> bytes:
 def find_drawio() -> list[str] | None:
     """Return the command prefix to invoke draw.io headlessly, or None.
 
-    Priority:
-      1. CREPE_DRAWIO_PATH env var (must be an executable file).
-      2. 'drawio' or 'draw.io' on PATH or SlackBuild location (/opt/drawio/drawio).
-      3. macOS app bundle.
-      4. Flatpak com.jgraph.drawio.desktop (Linux only, verified installed).
+    Uses `which` (shutil.which) to discover `drawio` or `draw.io` on PATH,
+    standard SlackBuild/Unix paths (/opt/drawio/drawio), macOS app bundle,
+    or a verified active Flatpak installation.
     """
+    # 1. Check explicit override if set and valid executable
     override = os.environ.get("CREPE_DRAWIO_PATH", "").strip()
-    if override:
+    if override and os.path.isfile(override) and os.access(override, os.X_OK):
         if "com.jgraph.drawio.desktop" in override or "flatpak" in override:
             if shutil.which("flatpak"):
                 try:
@@ -102,29 +101,31 @@ def find_drawio() -> list[str] | None:
                         return ["flatpak", "run", "--filesystem=host", "--filesystem=/tmp", "com.jgraph.drawio.desktop"]
                 except Exception:
                     pass
-        elif os.path.isfile(override) and os.access(override, os.X_OK):
+        else:
             return [override]
-        else:
-            return None
 
-    for binary in ("drawio", "draw.io", "/opt/drawio/drawio", "/opt/draw.io/drawio"):
-        if "/" in binary:
-            if os.path.isfile(binary) and os.access(binary, os.X_OK):
-                return [binary]
-        else:
-            found = shutil.which(binary)
-            if found:
-                return [found]
+    # 2. Use which to find native drawio / draw.io on PATH
+    for binary in ("drawio", "draw.io"):
+        found = shutil.which(binary)
+        if found:
+            return [found]
 
+    # 3. Check standard SlackBuild / Unix binary paths
+    for opt_path in ("/opt/drawio/drawio", "/opt/draw.io/drawio", "/usr/local/bin/drawio", "/usr/bin/drawio"):
+        if os.path.isfile(opt_path) and os.access(opt_path, os.X_OK):
+            return [opt_path]
+
+    # 4. macOS app bundle
     macos_path = "/Applications/draw.io.app/Contents/MacOS/draw.io"
     if os.path.isfile(macos_path) and os.access(macos_path, os.X_OK):
         return [macos_path]
 
+    # 5. Flatpak (if actively installed)
     if sys.platform.startswith("linux") and shutil.which("flatpak"):
         try:
             result = subprocess.run(
                 ["flatpak", "info", "com.jgraph.drawio.desktop"],
-                capture_output=True, timeout=10,
+                capture_output=True, timeout=5,
             )
             if result.returncode == 0:
                 return [

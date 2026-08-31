@@ -173,15 +173,15 @@ def has_flatpak_libreoffice() -> bool:
 
 
 def find_drawio() -> str | None:
-    """Auto-detect a native draw.io binary (PATH, SlackBuild /opt paths), macOS app bundle, or flatpak."""
-    for binary in ("drawio", "draw.io", "/opt/drawio/drawio", "/opt/draw.io/drawio"):
-        if "/" in binary:
-            if os.path.isfile(binary) and os.access(binary, os.X_OK):
-                return binary
-        else:
-            found = which_binary(binary)
-            if found:
-                return found
+    """Find draw.io executable using which on PATH, standard SlackBuild / Unix / macOS paths, or verified Flatpak."""
+    for binary in ("drawio", "draw.io"):
+        found = which_binary(binary)
+        if found:
+            return found
+
+    for opt_path in ("/opt/drawio/drawio", "/opt/draw.io/drawio", "/usr/local/bin/drawio", "/usr/bin/drawio"):
+        if os.path.isfile(opt_path) and os.access(opt_path, os.X_OK):
+            return opt_path
 
     macos_path = "/Applications/draw.io.app/Contents/MacOS/draw.io"
     if os.path.isfile(macos_path) and os.access(macos_path, os.X_OK):
@@ -522,7 +522,10 @@ def run_install(args: argparse.Namespace) -> None:
             libreoffice_path = interactive_prompt("Enter LibreOffice executable path (or Enter to skip)")
 
     # 5. draw.io
-    drawio_path = args.drawio_path or os.environ.get("CREPE_DRAWIO_PATH", "").strip()
+    drawio_env = os.environ.get("CREPE_DRAWIO_PATH", "").strip()
+    if drawio_env and (not os.path.isfile(drawio_env) or not os.access(drawio_env, os.X_OK)):
+        drawio_env = ""
+    drawio_path = args.drawio_path or drawio_env
     if not drawio_path:
         detected_dio = find_drawio()
         if detected_dio:
