@@ -45,12 +45,12 @@ flowchart TD
         Linters["In-Memory Linters<br/>(AST & Syntax Validation)"]
     end
 
-    %% Client connection
-    Agent <-->|stdio / JSON-RPC| Pres
-    Agent <-->|stdio / JSON-RPC| Docs
-    Agent <-->|stdio / JSON-RPC| Research
-    Agent <-->|stdio / JSON-RPC| Sheets
-    Agent <-->|stdio / JSON-RPC| Diagrams
+    %% Client connections (clean lines without protocol text)
+    Agent --> Pres
+    Agent --> Docs
+    Agent --> Research
+    Agent --> Sheets
+    Agent --> Diagrams
 
     %% Sub-server specific connections
     Pres --> Linters
@@ -72,18 +72,28 @@ flowchart TD
     Diagrams --> Linters
     Diagrams --> DrawioCLI
 
-    %% Nord Theme Styling
+    %% Nord Theme Node Styling
     classDef client fill:#2E3440,stroke:#88C0D0,stroke-width:2px,color:#ECEFF4;
     classDef server fill:#3B4252,stroke:#81A1C1,stroke-width:2px,color:#ECEFF4;
     classDef engine fill:#434C5E,stroke:#8FBCBB,stroke-width:1.5px,color:#ECEFF4;
-    classDef api fill:#4C566A,stroke:#A3BE8C,stroke-width:1.5px,color:#ECEFF4;
-    classDef internal fill:#434C5E,stroke:#D08770,stroke-width:1.5px,color:#ECEFF4;
+    classDef api fill:#434C5E,stroke:#81A1C1,stroke-width:1.5px,color:#ECEFF4;
+    classDef internal fill:#3B4252,stroke:#88C0D0,stroke-width:1.5px,color:#ECEFF4;
 
     class Agent client;
     class Pres,Docs,Research,Sheets,Diagrams server;
     class Pandoc,LibreOffice,Chromium,DrawioCLI engine;
     class SemScholar,ArxivAPI,TavilyAPI,WikiAPI api;
     class OpenPyXL,Linters internal;
+
+    %% Subgraph Container Styling (Overrides GitHub's default yellow containers)
+    style ClientLayer fill:#2E3440,stroke:#4C566A,stroke-width:1.5px,color:#ECEFF4;
+    style FastMCPLayer fill:#2E3440,stroke:#5E81AC,stroke-width:1.5px,color:#ECEFF4;
+    style SystemTools fill:#2E3440,stroke:#4C566A,stroke-width:1.5px,color:#ECEFF4;
+    style ExternalAPIs fill:#2E3440,stroke:#4C566A,stroke-width:1.5px,color:#ECEFF4;
+    style PythonEngines fill:#2E3440,stroke:#4C566A,stroke-width:1.5px,color:#ECEFF4;
+
+    %% Link Styling (Overrides default red/orange links)
+    linkStyle default stroke:#81A1C1,stroke-width:1.5px;
 ```
 
 ---
