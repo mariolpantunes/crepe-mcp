@@ -4,7 +4,7 @@
 
 # CREPE — Compile, Research, Export, Presentation Engine
 
-An MCP server for [Goose](https://block.github.io/goose/), [Claude Desktop](https://claude.ai), [Claude Code](https://docs.anthropic.com/en/docs/agents-and-tools/claude-code/overview), and [Antigravity (AGY CLI)](https://github.com/google-deepmind) that turns AI agents into capable document and presentation authors: draft slide decks in Pandoc Markdown, compile to Beamer PDF or PowerPoint, build A4 reports and articles, manage styled Excel workbooks, export Draw.io architecture diagrams, and pull in research from Semantic Scholar, arXiv, Wikipedia, and the live web.
+An MCP server for [Goose](https://block.github.io/goose/), [Claude Desktop](https://claude.ai), and [Antigravity (AGY CLI)](https://github.com/google-deepmind) that turns AI agents into capable document and presentation authors: draft slide decks in Pandoc Markdown, compile to Beamer PDF or PowerPoint, build A4 reports and articles, manage styled Excel workbooks, export Draw.io architecture diagrams, and pull in research from Semantic Scholar, arXiv, Wikipedia, and the live web.
 
 ---
 
