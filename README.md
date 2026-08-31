@@ -45,7 +45,7 @@ flowchart TD
         Linters["In-Memory Linters<br/>(AST & Syntax Validation)"]
     end
 
-    %% Client connections (clean lines without protocol text)
+    %% Client connections
     Agent --> Pres
     Agent --> Docs
     Agent --> Research
@@ -72,28 +72,36 @@ flowchart TD
     Diagrams --> Linters
     Diagrams --> DrawioCLI
 
-    %% Nord Theme Node Styling
-    classDef client fill:#2E3440,stroke:#88C0D0,stroke-width:2px,color:#ECEFF4;
-    classDef server fill:#3B4252,stroke:#81A1C1,stroke-width:2px,color:#ECEFF4;
-    classDef engine fill:#434C5E,stroke:#8FBCBB,stroke-width:1.5px,color:#ECEFF4;
-    classDef api fill:#434C5E,stroke:#81A1C1,stroke-width:1.5px,color:#ECEFF4;
-    classDef internal fill:#3B4252,stroke:#88C0D0,stroke-width:1.5px,color:#ECEFF4;
+    %% Nord Theme High-Contrast Node Styling
+    classDef client fill:#5E81AC,stroke:#ECEFF4,stroke-width:2px,color:#ECEFF4;
+    classDef pres fill:#81A1C1,stroke:#2E3440,stroke-width:1.5px,color:#2E3440;
+    classDef docs fill:#88C0D0,stroke:#2E3440,stroke-width:1.5px,color:#2E3440;
+    classDef research fill:#8FBCBB,stroke:#2E3440,stroke-width:1.5px,color:#2E3440;
+    classDef sheets fill:#A3BE8C,stroke:#2E3440,stroke-width:1.5px,color:#2E3440;
+    classDef diagrams fill:#B48EAD,stroke:#2E3440,stroke-width:1.5px,color:#2E3440;
+    classDef engine fill:#3B4252,stroke:#88C0D0,stroke-width:1.8px,color:#ECEFF4;
+    classDef api fill:#3B4252,stroke:#A3BE8C,stroke-width:1.8px,color:#ECEFF4;
+    classDef internal fill:#3B4252,stroke:#EBCB8B,stroke-width:1.8px,color:#ECEFF4;
 
     class Agent client;
-    class Pres,Docs,Research,Sheets,Diagrams server;
+    class Pres pres;
+    class Docs docs;
+    class Research research;
+    class Sheets sheets;
+    class Diagrams diagrams;
     class Pandoc,LibreOffice,Chromium,DrawioCLI engine;
     class SemScholar,ArxivAPI,TavilyAPI,WikiAPI api;
     class OpenPyXL,Linters internal;
 
-    %% Subgraph Container Styling (Overrides GitHub's default yellow containers)
-    style ClientLayer fill:#2E3440,stroke:#4C566A,stroke-width:1.5px,color:#ECEFF4;
-    style FastMCPLayer fill:#2E3440,stroke:#5E81AC,stroke-width:1.5px,color:#ECEFF4;
-    style SystemTools fill:#2E3440,stroke:#4C566A,stroke-width:1.5px,color:#ECEFF4;
-    style ExternalAPIs fill:#2E3440,stroke:#4C566A,stroke-width:1.5px,color:#ECEFF4;
-    style PythonEngines fill:#2E3440,stroke:#4C566A,stroke-width:1.5px,color:#ECEFF4;
+    %% Major Subgraph Containers (Distinct Nord Backgrounds & Bold Accent Borders)
+    style ClientLayer fill:#2E3440,stroke:#88C0D0,stroke-width:2px,color:#ECEFF4;
+    style FastMCPLayer fill:#242933,stroke:#81A1C1,stroke-width:2px,color:#ECEFF4;
+    style SystemTools fill:#2E3440,stroke:#5E81AC,stroke-width:2px,color:#ECEFF4;
+    style ExternalAPIs fill:#2E3440,stroke:#A3BE8C,stroke-width:2px,color:#ECEFF4;
+    style PythonEngines fill:#2E3440,stroke:#B48EAD,stroke-width:2px,color:#ECEFF4;
 
-    %% Link Styling (Overrides default red/orange links)
-    linkStyle default stroke:#81A1C1,stroke-width:1.5px;
+    %% Link Styling (Bright Frost Cyan)
+    linkStyle default stroke:#88C0D0,stroke-width:1.6px;
 ```
 
 ---
