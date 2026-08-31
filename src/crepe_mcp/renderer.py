@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import re
-from typing import Optional
 
 import yaml
 
@@ -21,6 +20,8 @@ _TOP_LEVEL_HEADING_RE = re.compile(r"^#\s+\S", re.MULTILINE)
 _HEADING_RE = re.compile(r"^(#{1,2})\s+(.*)$")
 # A fenced code block delimiter (``` or ~~~, 3+ chars, optional info string).
 _FENCE_OPEN_RE = re.compile(r"^(`{3,}|~{3,})")
+
+
 
 # LaTeX preamble included in every Beamer/lualatex deck.
 HEADER_INCLUDES = [
@@ -77,7 +78,7 @@ def build_config_yaml(
 
 def _render_slide(slide: Slide) -> str:
     content = slide.content.strip()
-    if "\n" not in content and _SECTION_DIVIDER_RE.match(content):
+    if "\n" not in content.strip() and _SECTION_DIVIDER_RE.match(content):
         # Section-divider slide (README syntax: "# Section Title" as the
         # only content). Emit the bare heading with no enclosing "## " frame:
         # wrapping it in an empty frame produces a redundant blank page
@@ -101,7 +102,7 @@ def has_sections(markdown: str) -> bool:
     return bool(_TOP_LEVEL_HEADING_RE.search(markdown))
 
 
-def _fence_run(line: str) -> Optional[tuple[str, int]]:
+def _fence_run(line: str) -> tuple[str, int] | None:
     """(char, length) if the stripped line opens a fence (``` or ~~~), else None."""
     match = _FENCE_OPEN_RE.match(line.strip())
     if not match:
@@ -128,7 +129,8 @@ def parse_slides_markdown(markdown: str) -> list[tuple[str, str]]:
     Raises ValueError if there's no heading at all, or content appears before
     the first heading (nothing to attach it to).
     """
-    fence: Optional[tuple[str, int]] = None
+    fence: tuple[str, int] | None = None
+
     blocks: list[tuple[str, str, list[str]]] = []
     preamble: list[str] = []
 

@@ -1,0 +1,14 @@
+Read AGENTS.md in the current directory first, then use the CREPE MCP server tools to:
+
+1. Create an A4 report document titled "AI Safety Summary", author "Research Team", date "2026"
+2. Add chapters and sections:
+   - Chapter 0: "Introduction" with intro text (2-3 sentences about AI safety)
+   - Chapter 1: "Key Risks"
+     - Section 0 (level 2): "Alignment" — 1 paragraph
+     - Section 1 (level 2): "Misuse" — 1 paragraph
+   - Chapter 2: "Conclusion" with intro text (1-2 sentences)
+3. Call lint_document() — fix any issues before proceeding
+4. Compile to PDF at /tmp/ai_safety_test.pdf
+5. Render as PNGs and report the page count
+
+Rules: do NOT use \includegraphics or any raw LaTeX environment.

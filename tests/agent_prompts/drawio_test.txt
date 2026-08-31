@@ -1,0 +1,14 @@
+Read AGENTS.md in the current directory first, then:
+
+1. Write a minimal valid .drawio XML file to /tmp/test_arch.drawio with:
+   - One page named "Architecture"
+   - A box labeled "Client" (mxCell id="2", vertex=1, parent="1")
+   - A box labeled "Server" (mxCell id="3", vertex=1, parent="1")
+   - An edge from Client to Server (mxCell id="4", edge=1, source="2", target="3", parent="1")
+   - Include the required base cells: id="0" and id="1" parent="0"
+
+2. Call lint_drawio("/tmp/test_arch.drawio") — report results
+
+3. If valid, export as PNG to /tmp/test_arch.png with transparent=True and scale=2.0
+
+4. Report the output file size in bytes.

@@ -15,11 +15,11 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
-from typing import Optional
 
 
-def _find_libreoffice() -> Optional[list[str]]:
+def _find_libreoffice() -> list[str] | None:
     """Return the command prefix to invoke LibreOffice headless, or None.
 
     Checks (in order): CREPE_LIBREOFFICE_PATH override, `soffice`/`libreoffice`
@@ -27,8 +27,11 @@ def _find_libreoffice() -> Optional[list[str]]:
     org.libreoffice.LibreOffice. Mirrors setup.py's find_headless_browser().
     """
     override = os.environ.get("CREPE_LIBREOFFICE_PATH", "").strip()
-    if override and os.path.isfile(override):
-        return [override]
+    if override:
+        if "org.libreoffice.LibreOffice" in override or "flatpak" in override:
+            return ["flatpak", "run", "--filesystem=host", "--filesystem=/tmp", "org.libreoffice.LibreOffice"]
+        if os.path.isfile(override) and os.access(override, os.X_OK):
+            return [override]
 
     for binary in ("soffice", "libreoffice"):
         found = shutil.which(binary)
@@ -60,18 +63,29 @@ def _find_libreoffice() -> Optional[list[str]]:
     return None
 
 
-def _render_pptx_via_libreoffice(
+def _render_office_to_pngs(
     cmd_prefix: list[str],
     pptx_path: str,
     output_dir: str,
     dpi: int,
     timeout: int = 120,
 ) -> list[str]:
-    """Convert PPTX -> PDF via LibreOffice headless, then rasterize with pymupdf."""
-    cmd = cmd_prefix + ["--headless", "--convert-to", "pdf", "--outdir", output_dir, pptx_path]
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
-    if result.returncode != 0:
-        raise RuntimeError(f"LibreOffice failed to convert PPTX to PDF:\n{result.stderr.strip()}")
+    """Convert an Office file (PPTX or DOCX) → PDF via LibreOffice headless, then rasterize with pymupdf."""
+    with tempfile.TemporaryDirectory(prefix="crepe_lo_") as profile_dir:
+        # -env:UserInstallation isolates this invocation from any running LibreOffice instance or leftover lock
+        cmd = cmd_prefix + [
+            f"-env:UserInstallation=file://{profile_dir}",
+            "--headless",
+            "--convert-to", "pdf",
+            "--outdir", output_dir,
+            pptx_path,
+        ]
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError(f"LibreOffice timed out converting {os.path.basename(pptx_path)!r} to PDF") from exc
+        if result.returncode != 0:
+            raise RuntimeError(f"LibreOffice failed to convert document to PDF:\n{result.stderr.strip()}")
 
     base = os.path.splitext(os.path.basename(pptx_path))[0]
     pdf_path = os.path.join(output_dir, base + ".pdf")
@@ -84,6 +98,10 @@ def _render_pptx_via_libreoffice(
         os.remove(pdf_path)
 
 
+# Public alias — use this in preference to the private `_render_office_to_pngs` name.
+render_via_libreoffice = _render_office_to_pngs
+
+
 def render_pdf_to_pngs(
     pdf_path: str,
     output_dir: str,
@@ -92,8 +110,8 @@ def render_pdf_to_pngs(
     """Render every page of a PDF to a numbered PNG sequence via pymupdf."""
     try:
         import fitz  # pymupdf
-    except ImportError:
-        raise ImportError("pymupdf is not installed. Run: pip install pymupdf")
+    except ImportError as exc:
+        raise ImportError("pymupdf is not installed. Run: pip install pymupdf") from exc
 
     Path(output_dir).mkdir(parents=True, exist_ok=True)
     zoom = dpi / 72.0       # pymupdf base resolution is 72 dpi
@@ -102,13 +120,15 @@ def render_pdf_to_pngs(
     png_files: list[str] = []
     doc = fitz.open(pdf_path)
     try:
-        for i, page in enumerate(doc):
+        for i in range(len(doc)):
+            page = doc[i]
             pix = page.get_pixmap(matrix=mat)
             out_path = os.path.join(output_dir, f"slide_{i + 1:03d}.png")
             pix.save(out_path)
             png_files.append(out_path)
     finally:
         doc.close()
+
     return png_files
 
 
@@ -127,10 +147,10 @@ def render_pptx_to_pngs(
     Path(output_dir).mkdir(parents=True, exist_ok=True)
     cmd = _find_libreoffice()
     if cmd is None:
-        raise ImportError(
+        raise RuntimeError(
             "LibreOffice is required to render PPTX slides (install via your "
             "package manager, e.g. libreoffice-impress, the macOS app bundle, or "
             "`flatpak install flathub org.libreoffice.LibreOffice`)."
         )
-    png_files = _render_pptx_via_libreoffice(cmd, pptx_path, output_dir, dpi)
+    png_files = _render_office_to_pngs(cmd, pptx_path, output_dir, dpi)
     return png_files, "libreoffice"

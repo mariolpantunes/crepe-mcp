@@ -1,0 +1,62 @@
+# The CI gate, moved to commit time.
+#
+# Every hook is `language: system`, not a pinned mirror. A mirror would fetch
+# its own copy of ruff or basedpyright and run it against a config pre-commit
+# chose, which is how a repository ends up with hooks that pass and CI that
+# fails. These call the tools already installed in the environment and let them
+# read pyproject.toml, so `git commit` and CI run the same check with the same
+# settings by construction.
+#
+# `pass_filenames: false` on the whole-project tools is deliberate. basedpyright
+# and vulture both need to see every file to be correct -- vulture calls a
+# function dead when nothing references it, and handing it only the staged files
+# means everything they reference looks unreferenced.
+#
+# `files` rather than `types: [python]` on the project-wide hooks: they are
+# driven by pyproject.toml (ruff rules, basedpyright mode, vulture paths), so
+# a commit that changes only that file must still run them.
+#
+# Install with: pre-commit install
+# Run over everything once: pre-commit run --all-files
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: [--maxkb=512]
+
+  - repo: local
+    hooks:
+      - id: ruff
+        name: ruff
+        entry: ruff check .
+        language: system
+        files: '(\.py$|^pyproject\.toml$)'
+        pass_filenames: false
+
+      - id: basedpyright
+        name: basedpyright
+        entry: basedpyright
+        language: system
+        files: '(\.py$|^pyproject\.toml$)'
+        pass_filenames: false
+
+      - id: vulture
+        name: vulture
+        entry: vulture src/crepe_mcp
+        language: system
+        files: '(\.py$|^pyproject\.toml$)'
+        pass_filenames: false
+
+      - id: unittest
+        name: unittest (tests)
+        entry: env PYTHONPATH=src python3 -m unittest discover -s tests -p "test_*.py" -v
+        language: system
+        files: '(\.py$|^pyproject\.toml$)'
+        pass_filenames: false

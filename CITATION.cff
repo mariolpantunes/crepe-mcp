@@ -1,0 +1,21 @@
+cff-version: 1.2.0
+message: "If you use CREPE-MCP in your research, please cite it as below."
+type: software
+title: "CREPE-MCP: Compile, Research, Export, Presentation Engine"
+authors:
+  - family-names: Antunes
+    given-names: Mário
+    email: mario.antunes@ua.pt
+repository-code: "https://github.com/mariolpantunes/crepe-mcp"
+license: MIT
+version: 0.2.0
+date-released: "2026-08-31"
+keywords:
+  - mcp
+  - presentation
+  - pandoc
+  - beamer
+  - pptx
+  - research
+  - documents
+  - spreadsheets

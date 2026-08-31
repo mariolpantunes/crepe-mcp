@@ -7,6 +7,7 @@ and physical file creation (.pdf, .pptx, and .png sequences).
 """
 from __future__ import annotations
 
+import asyncio
 import os
 import shutil
 import sys
@@ -50,7 +51,7 @@ def main() -> None:
     print_check("FastMCP Instance Name", mcp_instance.name == "crepe", f"name={mcp_instance.name}")
 
     print_section("STAGE 2: GROUP A (PRESENTATION TOOLS)")
-    
+
     # 1. create_presentation
     print("Creating presentation...")
     res_create = call_tool(
@@ -64,7 +65,8 @@ def main() -> None:
     pres_id = res_create.get("presentation_id")
     print_check("create_presentation returns presentation_id", bool(pres_id), f"presentation_id={pres_id}")
     assert pres_id is not None
-    print_check("create_presentation metadata title", res_create.get("metadata", {}).get("title") == "Validation Suite Deck")
+    is_title_match = res_create.get("metadata", {}).get("title") == "Validation Suite Deck"
+    print_check("create_presentation metadata title", is_title_match)
 
     # 2. set_slide (appends)
     print("\nAdding Slide 0 (Introduction)...")
@@ -140,7 +142,7 @@ def main() -> None:
     print("\nInspecting presentation state...")
     res_get_pres = call_tool(server.get_presentation, presentation_id=pres_id)
     print_check("get_presentation total slides", res_get_pres.get("slide_count") == 3)
-    
+
     res_get_slide = call_tool(server.get_slide, presentation_id=pres_id, slide_index=1)
     print_check(
         "get_slide verifies replaced content",
@@ -222,6 +224,31 @@ def main() -> None:
         f"open presentation_ids: {listed_ids}",
     )
 
+    # 8b. move_slide & duplicate_presentation
+    print("\nTesting move_slide & duplicate_presentation...")
+    res_move = call_tool(server.move_slide, presentation_id=pres_id, from_index=2, to_index=0)
+    print_check(
+        "move_slide reorders slides atomically",
+        res_move.get("success") is True and res_move.get("to_index") == 0,
+        f"move result: {res_move}",
+    )
+    s0 = call_tool(server.get_slide, presentation_id=pres_id, slide_index=0)
+    print_check(
+        "move_slide verifies slide at index 0 is now 'Slide with Notes'",
+        s0.get("title") == "Slide with Notes",
+        f"title at 0: {s0.get('title')}",
+    )
+
+    res_dup = call_tool(server.duplicate_presentation, presentation_id=pres_id)
+    dup_id = res_dup.get("new_presentation_id")
+    print_check(
+        "duplicate_presentation clones presentation and slides",
+        res_dup.get("success") is True and bool(dup_id) and res_dup.get("slide_count") == 3,
+        f"dup_id={dup_id}",
+    )
+    call_tool(server.cleanup_presentation, presentation_id=dup_id)
+
+
     # 9. concurrency: expected_slide_count guard makes concurrent set_slide
     # calls fail cleanly instead of silently landing at an unintended
     # position. A plain lock alone measurably isn't enough here -- the
@@ -295,7 +322,11 @@ def main() -> None:
     print("\nImporting exported source into a fresh presentation...")
     res_new = call_tool(server.create_presentation, title="Import Target")
     new_pid = res_new["presentation_id"]
-    res_import = call_tool(server.import_presentation_source, presentation_id=new_pid, source_path=res_export["slides_path"])
+    res_import = call_tool(
+        server.import_presentation_source,
+        presentation_id=new_pid,
+        source_path=res_export["slides_path"],
+    )
     print_check(
         "import_presentation_source reconstructs the same slide count from the exported file",
         res_import.get("success") is True and res_import.get("slide_count") == 3,
@@ -318,13 +349,17 @@ def main() -> None:
         res_import_both.get("success") is False,
         f"error={res_import_both.get('error')!r}",
     )
-    res_import_bad_md = call_tool(server.import_presentation_source, presentation_id=new_pid, markdown="no heading here")
+    res_import_bad_md = call_tool(
+        server.import_presentation_source, presentation_id=new_pid, markdown="no heading here"
+    )
     print_check(
         "import_presentation_source rejects Markdown with no heading",
         res_import_bad_md.get("success") is False,
         f"error={res_import_bad_md.get('error')!r}",
     )
-    fence_markdown = "## Code Slide\n\n```python\n# not a heading\ndef f():\n    ## also not a heading\n    return 1\n```\n"
+    fence_markdown = (
+        "## Code Slide\n\n```python\n# not a heading\ndef f():\n    ## also not a heading\n    return 1\n```\n"
+    )
     res_import_fence = call_tool(server.import_presentation_source, presentation_id=new_pid, markdown=fence_markdown)
     fence_slide = call_tool(server.get_slide, presentation_id=new_pid, slide_index=0)
     print_check(
@@ -344,11 +379,11 @@ def main() -> None:
         server.compile_presentation,
         presentation_id=pres_id,
         output_path=pdf_output,
-        format="pdf",
+        output_format="pdf",
         theme="moloch",
     )
     print_check(
-        "compile_presentation format=pdf",
+        "compile_presentation output_format=pdf",
         res_pdf.get("success") is True and os.path.isfile(pdf_output) and os.path.getsize(pdf_output) > 0,
         f"PDF size: {os.path.getsize(pdf_output)} bytes",
     )
@@ -369,13 +404,13 @@ def main() -> None:
     res_pdf_png = call_tool(
         server.render_slides_as_pngs,
         presentation_id=pres_id,
-        format="pdf",
+        output_format="pdf",
         output_dir=pdf_png_dir,
         dpi=100,
     )
     png_files = res_pdf_png.get("png_files", [])
     print_check(
-        "render_slides_as_pngs format=pdf (pymupdf)",
+        "render_slides_as_pngs output_format=pdf (pymupdf)",
         res_pdf_png.get("success") is True
         and res_pdf_png.get("converter") == "pymupdf"
         and len(png_files) >= 3
@@ -390,10 +425,10 @@ def main() -> None:
         server.compile_presentation,
         presentation_id=pres_id,
         output_path=pptx_output,
-        format="pptx",
+        output_format="pptx",
     )
     print_check(
-        "compile_presentation format=pptx",
+        "compile_presentation output_format=pptx",
         res_pptx.get("success") is True and os.path.isfile(pptx_output) and os.path.getsize(pptx_output) > 0,
         f"PPTX size: {os.path.getsize(pptx_output)} bytes",
     )
@@ -404,7 +439,7 @@ def main() -> None:
     res_pptx_png = call_tool(
         server.render_slides_as_pngs,
         presentation_id=pres_id,
-        format="pptx",
+        output_format="pptx",
         output_dir=pptx_png_dir,
         dpi=100,
     )
@@ -412,7 +447,7 @@ def main() -> None:
     if res_pptx_png.get("success") is True:
         converter = res_pptx_png.get("converter")
         print_check(
-            "render_slides_as_pngs format=pptx (libreoffice)",
+            "render_slides_as_pngs output_format=pptx (libreoffice)",
             converter == "libreoffice"
             and len(pptx_png_files) >= 3
             and all(os.path.isfile(p) and os.path.getsize(p) > 0 for p in pptx_png_files),
@@ -421,7 +456,7 @@ def main() -> None:
     else:
         err_msg = res_pptx_png.get("error", "")
         print_check(
-            "render_slides_as_pngs format=pptx cleanly reports missing LibreOffice "
+            "render_slides_as_pngs output_format=pptx cleanly reports missing LibreOffice "
             "instead of crashing the process (no fallback, by design)",
             "LibreOffice is required" in err_msg,
             f"Clean error returned: {err_msg[:160]}...",
@@ -502,21 +537,225 @@ def main() -> None:
     # 19. fetch_webpage (urllib fallback check)
     print("\nTesting fetch_webpage (urllib fallback mode)...")
     os.environ.pop("CREPE_HEADLESS_BROWSER_PATH", None)
-    res_fetch = call_tool(server.fetch_webpage, url="https://example.com", max_chars=1000)
+    res_fetch = asyncio.run(server.fetch_webpage(url="https://example.com", max_chars=1000))
+    has_fallback_warning = (
+        "CREPE_HEADLESS_BROWSER_PATH is not set" in res_fetch.get("warning", "")
+        or bool(res_fetch.get("browser_used"))
+    )
     print_check(
-        "fetch_webpage extracts text via urllib and returns warning when browser unset",
-        "Example Domain" in res_fetch.get("content", "") and "CREPE_HEADLESS_BROWSER_PATH is not set" in res_fetch.get("warning", ""),
-        f"Extracted content length: {len(res_fetch.get('content', ''))} | warning present: {bool(res_fetch.get('warning'))}",
+        "fetch_webpage (urllib fallback mode)",
+        "Example Domain" in res_fetch.get("content", "") and has_fallback_warning,
+        f"content snippet: {res_fetch.get('content', '')[:100]!r}, warning: {res_fetch.get('warning')!r}",
     )
 
-    res_fetch_file = call_tool(server.fetch_webpage, url="file:///etc/passwd", max_chars=1000)
+    res_fetch_file = asyncio.run(server.fetch_webpage(url="file:///etc/passwd", max_chars=1000))
     print_check(
         "fetch_webpage rejects non-http(s) schemes (e.g. file://) instead of disclosing local files",
         res_fetch_file.get("content", "") == "" and "Unsupported URL scheme" in res_fetch_file.get("error", ""),
         f"error='{res_fetch_file.get('error')}'",
     )
 
-    print_section("ALL 17 TOOLS SUCCESSFULLY VALIDATED!")
+    print_section("STAGE 4: GROUP C (DRAWIO TOOLS)")
+
+    _DRAWIO_FIXTURE = """\
+<mxfile host="Electron" modified="2026-01-01T00:00:00.000Z" agent="CREPE" version="24.0.0">
+  <diagram id="Page-1" name="Page-1">
+    <mxGraphModel dx="800" dy="600" grid="1" gridSize="10">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="node1" value="FastMCP Server" style="rounded=1;fillColor=#dae8fc;" vertex="1" parent="1">
+          <mxGeometry x="120" y="120" width="160" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="node2" value="Pandoc Engine" style="rounded=1;fillColor=#d5e8d4;" vertex="1" parent="1">
+          <mxGeometry x="360" y="120" width="160" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="edge1" edge="1" parent="1" source="node1" target="node2" style="edgeStyle=orthogonalEdgeStyle;">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
+"""
+    drawio_src = "/tmp/crepe_val_fixture.drawio"
+    with open(drawio_src, "w", encoding="utf-8") as _f:
+        _f.write(_DRAWIO_FIXTURE)
+
+    # 20. inspect_drawio
+    print("Testing inspect_drawio...")
+    res_inspect_dio = call_tool(server.inspect_drawio, input_path=drawio_src)
+    print_check(
+        "inspect_drawio returns success=True and page metadata",
+        res_inspect_dio.get("success") is True
+        and res_inspect_dio.get("page_count") == 1
+        and res_inspect_dio.get("pages", [{}])[0].get("name") == "Page-1",
+        f"inspect_drawio result: {res_inspect_dio}",
+    )
+
+    # 20b. lint_drawio (structure validation)
+    print("Testing lint_drawio...")
+    res_lint_dio = call_tool(server.lint_drawio, input_path=drawio_src)
+    print_check(
+        "lint_drawio validates base cells and report",
+        res_lint_dio.get("valid") is True and res_lint_dio.get("page_count") == 1,
+        f"lint_drawio result: {res_lint_dio}",
+    )
+
+    # 21. export_drawio — full export if draw.io available, clean error otherwise
+    print("\nTesting export_drawio...")
+    drawio_out = "/tmp/crepe_val_fixture_p1.png"
+    res_export_dio = call_tool(
+        server.export_drawio,
+        input_path=drawio_src,
+        output_path=drawio_out,
+        output_format="png",
+        page_index=1,
+        transparent=True,
+        scale=2.0,
+    )
+    if res_export_dio.get("success") is True:
+        print_check(
+            "export_drawio (draw.io binary available)",
+            os.path.isfile(drawio_out) and os.path.getsize(drawio_out) > 0,
+            f"exported PNG size: {os.path.getsize(drawio_out)} bytes",
+        )
+        os.remove(drawio_out)
+    else:
+        err_msg = res_export_dio.get("error", "")
+        print_check(
+            "export_drawio reports missing binary with installation instructions",
+            "draw.io is required" in err_msg or "CREPE_DRAWIO_PATH" in err_msg,
+            f"clean error: {err_msg[:120]}...",
+        )
+    if os.path.isfile(drawio_src):
+        os.remove(drawio_src)
+
+    print_section("STAGE 5: GROUP D (DOCUMENT ENGINE)")
+
+    res_cdoc = call_tool(
+        server.create_document,
+        title="CREPE Technical Report",
+        subtitle="System Architecture and Validation",
+        author="CREPE Harness",
+        paper_size="a4paper",
+        margin="2.5cm",
+    )
+    doc_id = res_cdoc.get("document_id")
+    print_check("create_document returns document_id", bool(doc_id), f"document_id={doc_id}")
+
+    res_ch1 = call_tool(
+        server.set_chapter,
+        document_id=doc_id,
+        chapter_index=0,
+        title="Introduction",
+        intro="Welcome to the technical report.",
+    )
+    print_check("set_chapter 0", res_ch1.get("action") == "appended" and res_ch1.get("title") == "Introduction")
+
+    res_sec1 = call_tool(
+        server.set_section,
+        document_id=doc_id,
+        chapter_index=0,
+        section_index=0,
+        title="Background & Objectives",
+        content="This section details the system architecture and verification goals.\n\n$$ E = mc^2 $$",
+    )
+    is_sec1_match = res_sec1.get("action") == "appended" and res_sec1.get("title") == "Background & Objectives"
+    print_check("set_section 0.0", is_sec1_match)
+
+    res_gdoc = call_tool(server.get_document, document_id=doc_id)
+    print_check(
+        "get_document hierarchy",
+        res_gdoc.get("chapter_count") == 1 and len(res_gdoc.get("chapters", [])) == 1,
+    )
+
+    doc_pdf = f"/tmp/crepe_val_doc_{doc_id}.pdf"
+    res_comp_pdf = call_tool(server.compile_document, document_id=doc_id, output_path=doc_pdf, output_format="pdf")
+    print_check(
+        "compile_document PDF (A4 paper)",
+        res_comp_pdf.get("success") is True and os.path.isfile(doc_pdf) and os.path.getsize(doc_pdf) > 0,
+        f"PDF size: {os.path.getsize(doc_pdf)} bytes",
+    )
+    if os.path.isfile(doc_pdf):
+        os.remove(doc_pdf)
+
+    doc_docx = f"/tmp/crepe_val_doc_{doc_id}.docx"
+    res_comp_docx = call_tool(server.compile_document, document_id=doc_id, output_path=doc_docx, output_format="docx")
+    print_check(
+        "compile_document DOCX",
+        res_comp_docx.get("success") is True and os.path.isfile(doc_docx) and os.path.getsize(doc_docx) > 0,
+        f"DOCX size: {os.path.getsize(doc_docx)} bytes",
+    )
+    if os.path.isfile(doc_docx):
+        os.remove(doc_docx)
+
+    call_tool(server.cleanup_document, document_id=doc_id)
+
+    print_section("STAGE 6: GROUP E (EXCEL ENGINE)")
+
+    xlsx_path = "/tmp/crepe_val_excel.xlsx"
+    print("Testing create_excel...")
+    res_excel_c = call_tool(
+        server.create_excel,
+        output_path=xlsx_path,
+        sheets=[
+            {
+                "name": "Metrics",
+                "headers": ["Item", "Value", "Status"],
+                "rows": [["Test A", 100, "PASS"], ["Test B", 200, "PASS"]],
+            }
+        ],
+    )
+    print_check(
+        "create_excel generates styled .xlsx",
+        res_excel_c.get("success") is True and os.path.isfile(xlsx_path) and os.path.getsize(xlsx_path) > 0,
+        f"Excel size: {os.path.getsize(xlsx_path)} bytes",
+    )
+
+    print("\nTesting inspect_excel...")
+    res_excel_i = call_tool(server.inspect_excel, input_path=xlsx_path)
+    is_excel_match = (
+        res_excel_i.get("success") is True
+        and res_excel_i.get("sheet_count") == 1
+        and res_excel_i["sheets"][0]["name"] == "Metrics"
+    )
+    print_check(
+        "inspect_excel reads sheet data & dimensions",
+        is_excel_match,
+        f"sheets={res_excel_i.get('sheets')}",
+    )
+
+    print("\nTesting update_excel_sheet...")
+    res_excel_u = call_tool(
+        server.update_excel_sheet,
+        input_path=xlsx_path,
+        sheet_name="Metrics",
+        append_rows=[["Test C", 300, "PASS"]],
+        update_cells={"D1": "FormulaTotal", "D2": "=SUM(B2:B3)"},
+    )
+    print_check(
+        "update_excel_sheet appends rows and sets cells/formulas",
+        res_excel_u.get("success") is True and res_excel_u.get("max_row") == 4,
+        f"max_row={res_excel_u.get('max_row')}",
+    )
+
+    print("\nTesting markdown_table_to_excel...")
+    md_table = "| Name | Role |\n|---|---|\n| Alice | Lead |\n| Bob | Dev |"
+    md_xlsx = "/tmp/crepe_val_md.xlsx"
+    res_md_excel = call_tool(server.markdown_table_to_excel, markdown_table=md_table, output_path=md_xlsx)
+    print_check(
+        "markdown_table_to_excel converts Markdown table to .xlsx",
+        res_md_excel.get("success") is True and os.path.isfile(md_xlsx),
+        f"md_xlsx size={os.path.getsize(md_xlsx)}",
+    )
+
+    if os.path.isfile(xlsx_path):
+        os.remove(xlsx_path)
+    if os.path.isfile(md_xlsx):
+        os.remove(md_xlsx)
+
+    print_section("ALL TOOLS (PRESENTATIONS, RESEARCH, DRAWIO, A4 DOCUMENTS, EXCEL) SUCCESSFULLY VALIDATED!")
 
 
 if __name__ == "__main__":

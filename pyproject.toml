@@ -4,16 +4,31 @@ build-backend = "hatchling.build"
 
 [project]
 name = "crepe-mcp"
-version = "0.1.0"
+version = "0.2.0"
+authors = [
+    {name = "Mário Antunes", email = "mario.antunes@ua.pt"}
+]
 description = "CREPE — Compile, Research, Export, Presentation Engine. An MCP server for AI Agents that drafts slide decks in Pandoc Markdown, compiles them to Beamer PDF or PowerPoint, renders PNGs for visual validation, and pulls research from Semantic Scholar, the web, and Wikipedia."
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 license = { text = "MIT" }
 keywords = ["mcp", "presentation", "pandoc", "beamer", "pptx", "research"]
 dependencies = [
-    "fastmcp>=2.0",
+    "fastmcp>=3.0",
+    "playwright>=1.40",
     "pyyaml>=6.0",
     "pymupdf>=1.24",
+    "openpyxl>=3.1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff",
+    "basedpyright",
+    "vulture",
+    "pre-commit",
+    "build",
+    "twine",
 ]
 
 [project.urls]
@@ -21,10 +36,40 @@ Repository = "https://github.com/mariolpantunes/crepe-mcp"
 Issues = "https://github.com/mariolpantunes/crepe-mcp/issues"
 
 [project.scripts]
-crepe-mcp = "crepe_mcp.server:main"
+crepe-mcp           = "crepe_mcp.server:main"
+crepe-presentations = "crepe_mcp.server_presentations:main"
+crepe-documents     = "crepe_mcp.server_documents:main"
+crepe-research      = "crepe_mcp.server_research:main"
+crepe-spreadsheets  = "crepe_mcp.server_spreadsheets:main"
+crepe-diagrams      = "crepe_mcp.server_diagrams:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/crepe_mcp"]
 
 [tool.hatch.build.targets.sdist]
 include = ["src/", "README.md", "pyproject.toml"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "B", "I", "UP"]
+ignore = ["B008"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E402"]
+
+[tool.basedpyright]
+typeCheckingMode = "standard"
+include = ["src/crepe_mcp"]
+venvPath = "."
+venv = ".venv"
+reportImportCycles = "none"
+reportReturnType = "none"
+
+[tool.vulture]
+paths = ["src/crepe_mcp"]
+min_confidence = 80
+ignore_names = ["main", "_emergency_exit", "_on_sigint", "_on_sigterm_early",
+                "_lifespan", "browser_lifespan"]

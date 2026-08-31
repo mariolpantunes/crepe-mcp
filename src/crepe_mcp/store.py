@@ -43,38 +43,8 @@ import tempfile
 import threading
 import uuid
 from dataclasses import dataclass, field
-from typing import Dict, List
 
-
-class _TicketLock:
-    """A mutex that grants entry in strict arrival (FIFO) order.
-
-    threading.Lock makes no fairness guarantee -- under contention, the OS
-    scheduler picks which waiter wakes next, which can and does reorder
-    logically-sequential operations. This hands out a ticket number on
-    entry and only proceeds once it's that ticket's turn, so N threads
-    calling __enter__ in some order T0, T1, ..., Tn-1 (wall-clock arrival)
-    are guaranteed to execute in that same order.
-    """
-
-    def __init__(self) -> None:
-        self._lock = threading.Lock()
-        self._cond = threading.Condition(self._lock)
-        self._next_ticket = 0
-        self._now_serving = 0
-
-    def __enter__(self) -> "_TicketLock":
-        self._lock.acquire()
-        ticket = self._next_ticket
-        self._next_ticket += 1
-        while self._now_serving != ticket:
-            self._cond.wait()
-        return self
-
-    def __exit__(self, exc_type, exc, tb) -> None:
-        self._now_serving += 1
-        self._cond.notify_all()
-        self._lock.release()
+from crepe_mcp._locks import TicketLock
 
 
 @dataclass
@@ -100,13 +70,13 @@ class Presentation:
     id: str
     workdir: str
     metadata: Metadata = field(default_factory=Metadata)
-    slides: List[Slide] = field(default_factory=list)
+    slides: list[Slide] = field(default_factory=list)
     # format -> absolute path on disk (populated after compile_presentation)
-    artifacts: Dict[str, str] = field(default_factory=dict)
-    lock: "_TicketLock" = field(default_factory=_TicketLock, repr=False, compare=False)
+    artifacts: dict[str, str] = field(default_factory=dict)
+    lock: TicketLock = field(default_factory=TicketLock, repr=False, compare=False)
 
 
-PRESENTATIONS: Dict[str, Presentation] = {}
+PRESENTATIONS: dict[str, Presentation] = {}
 _REGISTRY_LOCK = threading.Lock()
 
 
@@ -151,8 +121,10 @@ def delete_presentation(presentation_id: str) -> None:
 
 
 def _cleanup_all_workdirs() -> None:
-    for presentation in PRESENTATIONS.values():
-        shutil.rmtree(presentation.workdir, ignore_errors=True)
+    with _REGISTRY_LOCK:
+        workdirs = [p.workdir for p in PRESENTATIONS.values()]
+    for d in workdirs:
+        shutil.rmtree(d, ignore_errors=True)
 
 
 atexit.register(_cleanup_all_workdirs)
@@ -185,7 +157,7 @@ def upsert_slide(
     title: str,
     content: str,
     expected_slide_count: int | None = None,
-) -> tuple[Slide, str, int]:
+) -> tuple[Slide, str, int, list[str]]:
     """Insert or replace a slide at *index*.
 
     * index < len(slides)  → replace in-place (id preserved).
@@ -194,22 +166,28 @@ def upsert_slide(
     expected_slide_count, if given, must match the current count or this
     raises ValueError instead of guessing (see _check_expected_count).
 
-    Returns (slide, action, actual_index) where action is 'replaced' or
+    Returns (slide, action, actual_index, warnings) where action is 'replaced' or
     'appended'. actual_index is computed under the same lock as the
     mutation -- looking it up afterwards via slides.index(slide) would
     itself be a race if another call mutates the list in between.
     """
     if index < 0:
         raise ValueError(f"Slide index must be >= 0, got {index}")
-    slide = Slide(id=uuid.uuid4().hex[:8], title=title, content=content)
     with presentation.lock:
         _check_expected_count(presentation, expected_slide_count)
         if index < len(presentation.slides):
-            slide.id = presentation.slides[index].id
+            # Preserve the existing slide's id so the caller can detect a replace.
+            slide = Slide(
+                id=presentation.slides[index].id,
+                title=title,
+                content=content,
+            )
             presentation.slides[index] = slide
-            return slide, "replaced", index
+            return slide, "replaced", index, []
+        slide = Slide(id=uuid.uuid4().hex[:8], title=title, content=content)
         presentation.slides.append(slide)
-        return slide, "appended", len(presentation.slides) - 1
+        return slide, "appended", len(presentation.slides) - 1, []
+
 
 
 def get_slide_by_index(presentation: Presentation, index: int) -> Slide:
@@ -248,7 +226,7 @@ def insert_slide(
     title: str,
     content: str,
     expected_slide_count: int | None = None,
-) -> tuple[Slide, int]:
+) -> tuple[Slide, int, list[str]]:
     """Insert a new slide at *index*, shifting slides at/after it later.
 
     index >= len(slides) inserts at the end, consistent with
@@ -256,20 +234,44 @@ def insert_slide(
     given, must match the current count or this raises ValueError instead
     of guessing (see _check_expected_count).
 
-    Returns (slide, actual_index), computed under the same lock as the
+    Returns (slide, actual_index, warnings), computed under the same lock as the
     mutation for the same reason upsert_slide does.
     """
     if index < 0:
         raise ValueError(f"Slide index must be >= 0, got {index}")
-    slide = Slide(id=uuid.uuid4().hex[:8], title=title, content=content)
     with presentation.lock:
         _check_expected_count(presentation, expected_slide_count)
         actual_index = min(index, len(presentation.slides))
+        slide = Slide(id=uuid.uuid4().hex[:8], title=title, content=content)
         presentation.slides.insert(actual_index, slide)
-    return slide, actual_index
+    return slide, actual_index, []
 
 
-def list_presentations() -> List[Presentation]:
+def replace_all_slides(
+    presentation: Presentation,
+    parsed: list[tuple[str, str]],
+) -> int:
+    """Atomically replace every slide in *presentation* with *parsed* slides.
+
+    Builds the new Slide objects outside the lock (pure construction, no shared
+    state), then holds the lock for a single clear()+extend() — one atomic
+    operation with no intermediate empty-list state visible to other threads.
+
+    parsed : list of (title, content) pairs from parse_slides_markdown.
+    Returns the new slide count, read inside the lock so callers get an
+    accurate value without a second lock acquisition.
+    """
+    new_slides = [
+        Slide(id=uuid.uuid4().hex[:8], title=title, content=content)
+        for title, content in parsed
+    ]
+    with presentation.lock:
+        presentation.slides.clear()
+        presentation.slides.extend(new_slides)
+        return len(presentation.slides)
+
+
+def list_presentations() -> list[Presentation]:
     with _REGISTRY_LOCK:
         return list(PRESENTATIONS.values())
 
@@ -278,6 +280,52 @@ def update_metadata(presentation: Presentation, **fields: str | None) -> Metadat
     """Update only the metadata fields passed with a non-None value."""
     with presentation.lock:
         for key, value in fields.items():
-            if value is not None:
+            if value is not None and hasattr(presentation.metadata, key):
                 setattr(presentation.metadata, key, value)
         return presentation.metadata
+
+
+def move_slide(
+    presentation: Presentation,
+    from_index: int,
+    to_index: int,
+    expected_slide_count: int | None = None,
+) -> tuple[Slide, int]:
+    """Move a slide from from_index to to_index atomically under presentation lock.
+
+    Returns (slide, final_to_index).
+    """
+    with presentation.lock:
+        _check_expected_count(presentation, expected_slide_count)
+        num_slides = len(presentation.slides)
+        if from_index < 0 or from_index >= num_slides:
+            raise IndexError(f"from_index {from_index} out of range (slide count: {num_slides})")
+        if to_index < 0:
+            raise ValueError(f"to_index must be >= 0, got {to_index}")
+
+        slide = presentation.slides.pop(from_index)
+        target_index = min(to_index, len(presentation.slides))
+        presentation.slides.insert(target_index, slide)
+        return slide, target_index
+
+
+def duplicate_presentation(presentation_id: str, title_suffix: str = " (Copy)") -> Presentation:
+    """Clone an existing presentation into a new presentation instance with its own workdir.
+
+    Acquires src.lock only to snapshot metadata and slides; releases it before
+    calling new_presentation (which acquires _REGISTRY_LOCK internally). This
+    avoids establishing a pres.lock → _REGISTRY_LOCK ordering that could
+    deadlock if any future code path takes them in the opposite order.
+    """
+    src = get_presentation(presentation_id)
+    with src.lock:
+        meta_dict = vars(src.metadata).copy()
+        meta_dict["title"] = meta_dict.get("title", "") + title_suffix
+        slide_snapshot = [(s.title, s.content) for s in src.slides]
+    # Create new presentation *outside* src.lock — new_presentation acquires
+    # _REGISTRY_LOCK internally and must not do so while we hold src.lock.
+    new_pres = new_presentation(**meta_dict)
+    with new_pres.lock:
+        for title, content in slide_snapshot:
+            new_pres.slides.append(Slide(id=uuid.uuid4().hex[:8], title=title, content=content))
+    return new_pres

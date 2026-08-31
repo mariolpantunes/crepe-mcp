@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128"
+     role="img" aria-label="CREPE — Compile, Research, Export, Presentation Engine">
+  <title>CREPE MCP</title>
+  <desc>A charming, folded golden crêpe with a conversational talking expression, rising MCP function-calling steam braces { }, and five colored topping markers representing the five sub-servers: Presentations, Documents, Research, Spreadsheets, and Diagrams.</desc>
+
+  <style>
+    .cell         { fill: #f8fafc; stroke: #cbd5e1; }
+    .bubble       { fill: #ffffff; stroke: #cbd5e1; }
+    .crepe-base   { fill: #fde68a; stroke: #d97706; }
+    .crepe-fold   { fill: #fcd34d; stroke: #b45309; }
+    .crepe-detail { stroke: #d97706; }
+    .face         { fill: #78350f; stroke: #78350f; }
+    .steam        { stroke: #3b82f6; }
+    .fn-brace     { fill: #2563eb; font-family: ui-monospace, SFMono-Regular, "Cascadia Code", monospace; font-size: 13px; font-weight: bold; }
+    .halo         { stroke: #ffffff; }
+    @media (prefers-color-scheme: dark) {
+      .cell         { fill: #0f172a; stroke: #334155; }
+      .bubble       { fill: #1e293b; stroke: #475569; }
+      .crepe-base   { fill: #d97706; stroke: #f59e0b; }
+      .crepe-fold   { fill: #b45309; stroke: #fbbf24; }
+      .crepe-detail { stroke: #fbbf24; }
+      .face         { fill: #fef3c7; stroke: #fef3c7; }
+      .steam        { stroke: #60a5fa; }
+      .fn-brace     { fill: #60a5fa; }
+      .halo         { stroke: #0f172a; }
+    }
+  </style>
+
+  <!-- Outer background card -->
+  <rect class="cell" x="4" y="4" width="120" height="120" rx="24" stroke-width="3"/>
+
+  <!-- Conversational Speech Bubble Tail / Aura -->
+  <path class="bubble" stroke-width="2" stroke-linejoin="round"
+        d="M 28 88 L 18 102 L 36 96 Z"/>
+
+  <!-- Folded Crêpe Base (triangular French crêperie fold) -->
+  <path class="crepe-base" stroke-width="2.5" stroke-linejoin="round"
+        d="M 64 104 C 44 102, 22 86, 20 62 C 26 48, 48 38, 64 38 C 80 38, 102 48, 108 62 C 106 86, 84 102, 64 104 Z"/>
+
+  <!-- Golden Fold Layers -->
+  <path class="crepe-fold" stroke-width="2" stroke-linejoin="round"
+        d="M 24 58 Q 64 82, 104 58 L 64 104 Z"/>
+  <path class="crepe-fold" stroke-width="1.5" stroke-linejoin="round" opacity="0.85"
+        d="M 34 68 Q 64 88, 94 68 L 64 104 Z"/>
+
+  <!-- Delicate griddle texture accents -->
+  <path class="crepe-detail" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-dasharray="2 4"
+        d="M 40 50 Q 64 58, 88 50"/>
+
+  <!-- Friendly "Talking" Crêpe Facial Expression -->
+  <!-- Left Eye -->
+  <circle class="face" cx="54" cy="74" r="2.5"/>
+  <!-- Right Eye -->
+  <circle class="face" cx="74" cy="74" r="2.5"/>
+  <!-- Cheerful Talking Mouth -->
+  <path class="face" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"
+        d="M 59 81 Q 64 86, 69 81 Z"/>
+  <!-- Blush Accents -->
+  <circle cx="48" cy="78" r="2" fill="#f43f5e" opacity="0.6"/>
+  <circle cx="80" cy="78" r="2" fill="#f43f5e" opacity="0.6"/>
+
+  <!-- Rising Function Calling Steam { f(x) } -->
+  <path class="steam" fill="none" stroke-width="2" stroke-linecap="round"
+        d="M 44 32 C 40 24, 48 20, 44 14"/>
+  <path class="steam" fill="none" stroke-width="2" stroke-linecap="round"
+        d="M 84 32 C 88 24, 80 20, 84 14"/>
+
+  <!-- Code / Function Curly Braces as Steam Core -->
+  <text class="fn-brace" x="30" y="24" text-anchor="middle">{</text>
+  <text class="fn-brace" x="64" y="22" text-anchor="middle" font-size="11px">f(x)</text>
+  <text class="fn-brace" x="98" y="24" text-anchor="middle">}</text>
+
+  <!-- 5 Sub-server Topping Markers with Crisp Halos -->
+  <!-- 1. Presentations: Blue -->
+  <circle class="halo" cx="38" cy="54" r="4.5" fill="#3b82f6" stroke-width="1.5"/>
+  <!-- 2. Documents: Indigo -->
+  <circle class="halo" cx="52" cy="46" r="4.5" fill="#6366f1" stroke-width="1.5"/>
+  <!-- 3. Research: Teal -->
+  <circle class="halo" cx="64" cy="42" r="5" fill="#14b8a6" stroke-width="1.5"/>
+  <!-- 4. Spreadsheets: Emerald -->
+  <circle class="halo" cx="76" cy="46" r="4.5" fill="#10b981" stroke-width="1.5"/>
+  <!-- 5. Diagrams: Amber -->
+  <circle class="halo" cx="90" cy="54" r="4.5" fill="#f59e0b" stroke-width="1.5"/>
+</svg>

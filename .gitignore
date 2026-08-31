@@ -1,3 +1,8 @@
+uv.lock
+keys.md
+*.pdf
+
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
@@ -203,6 +208,7 @@ tempCodeRunnerFile.py
 .zed/
 
 # AI coding agents (local config/state dirs, not project source)
+.agents/
 .claude/
 .goose/
 .cursor/

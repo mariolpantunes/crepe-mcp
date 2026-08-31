@@ -1,0 +1,13 @@
+Read AGENTS.md in the current directory first, then use the CREPE MCP server tools to:
+
+1. Create a 4-slide presentation titled "Renewable Energy Overview"
+2. Add these slides:
+   - Slide 0: "Introduction" — 3 bullet points about renewable energy
+   - Slide 1: "Solar Power" — two-column layout: left with 3 bullet facts, right with the equation $P = IV$
+   - Slide 2: section divider with content "# Wind Power" (no title)
+   - Slide 3: "Python Example" — a Python code block printing "Hello, clean energy!"
+3. Call lint_presentation() — fix any issues before proceeding
+4. Compile to PPTX at /tmp/energy_test.pptx
+5. Render as PNGs and report the list of PNG paths
+
+Rules: do NOT use \includegraphics or any raw LaTeX command. Use standard Markdown image syntax ![](path) for any images.
