@@ -79,9 +79,9 @@ flowchart TD
     classDef research fill:#8FBCBB,stroke:#2E3440,stroke-width:1.5px,color:#2E3440;
     classDef sheets fill:#A3BE8C,stroke:#2E3440,stroke-width:1.5px,color:#2E3440;
     classDef diagrams fill:#B48EAD,stroke:#2E3440,stroke-width:1.5px,color:#2E3440;
-    classDef engine fill:#3B4252,stroke:#88C0D0,stroke-width:1.8px,color:#ECEFF4;
-    classDef api fill:#3B4252,stroke:#A3BE8C,stroke-width:1.8px,color:#ECEFF4;
-    classDef internal fill:#3B4252,stroke:#EBCB8B,stroke-width:1.8px,color:#ECEFF4;
+    classDef engine fill:#81A1C1,stroke:#2E3440,stroke-width:1.5px,color:#2E3440;
+    classDef api fill:#A3BE8C,stroke:#2E3440,stroke-width:1.5px,color:#2E3440;
+    classDef internal fill:#EBCB8B,stroke:#2E3440,stroke-width:1.5px,color:#2E3440;
 
     class Agent client;
     class Pres pres;
