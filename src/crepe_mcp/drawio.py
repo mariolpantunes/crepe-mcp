@@ -98,7 +98,17 @@ def find_drawio() -> list[str] | None:
     override = os.environ.get("CREPE_DRAWIO_PATH", "").strip()
     if override:
         if "com.jgraph.drawio.desktop" in override or "flatpak" in override:
-            return ["flatpak", "run", "--filesystem=host", "--filesystem=/tmp", "com.jgraph.drawio.desktop"]
+            if shutil.which("flatpak"):
+                try:
+                    res = subprocess.run(
+                        ["flatpak", "info", "com.jgraph.drawio.desktop"],
+                        capture_output=True, timeout=5,
+                    )
+                    if res.returncode == 0:
+                        return ["flatpak", "run", "--filesystem=host", "--filesystem=/tmp", "com.jgraph.drawio.desktop"]
+                except Exception:
+                    pass
+            return None
         if os.path.isfile(override) and os.access(override, os.X_OK):
             return [override]
         # Configured but not valid — don't silently fall through.
