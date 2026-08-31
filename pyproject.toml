@@ -63,8 +63,6 @@ ignore = ["B008"]
 [tool.basedpyright]
 typeCheckingMode = "standard"
 include = ["src/crepe_mcp"]
-venvPath = "."
-venv = ".venv"
 reportImportCycles = "none"
 reportReturnType = "none"
 

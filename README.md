@@ -14,38 +14,76 @@ CREPE sits between your AI agent and your system's underlying compilation, rende
 
 ```mermaid
 flowchart TD
-    subgraph AgentHost["AI Agent Environment"]
-        Agent["AI Agent (Goose / MCP Client)"]
+    subgraph ClientLayer["AI Agent Host"]
+        Agent["Goose / AI Agent (MCP Client)"]
     end
 
-    subgraph CREPE["CREPE MCP Engine (FastMCP 3.X)"]
-        subgraph SubServers["Modular Sub-Servers (or Monolith)"]
-            Pres["crepe-presentations<br/>(15 tools)"]
-            Docs["crepe-documents<br/>(12 tools)"]
-            Research["crepe-research<br/>(6 tools)"]
-            Sheets["crepe-spreadsheets<br/>(4 tools)"]
-            Diagrams["crepe-diagrams<br/>(3 tools)"]
-        end
-        Lock["TicketLock & Concurrency Guards"]
-        Linters["Pre-Compile Linters (AST & Syntax)"]
+    subgraph FastMCPLayer["CREPE Modular FastMCP 3.X Layer"]
+        Pres["crepe-presentations<br/>(15 tools)"]
+        Docs["crepe-documents<br/>(12 tools)"]
+        Research["crepe-research<br/>(6 tools)"]
+        Sheets["crepe-spreadsheets<br/>(4 tools)"]
+        Diagrams["crepe-diagrams<br/>(3 tools)"]
     end
 
-    subgraph SystemTools["System Engines & Web APIs"]
-        Pandoc["Pandoc + LuaLaTeX / Beamer<br/>(PDF, PPTX, DOCX)"]
-        Render["PyMuPDF & LibreOffice<br/>(PNG Slides & Visual Check)"]
-        Excel["openpyxl Engine<br/>(Styled Workbooks)"]
-        DrawIO["draw.io Desktop<br/>(PNG / SVG Export)"]
-        WebAPIs["Semantic Scholar · arXiv · Tavily · Wikipedia<br/>(Research & Retrieval)"]
+    subgraph SystemTools["System CLI Engines"]
+        Pandoc["Pandoc + LuaLaTeX<br/>(PDF, PPTX, DOCX)"]
+        LibreOffice["LibreOffice + PyMuPDF<br/>(PNG Slide Rasterization)"]
+        Chromium["Headless Chromium<br/>(Dynamic Web Scraping)"]
+        DrawioCLI["draw.io Desktop<br/>(Vector/PNG Export)"]
     end
 
-    Agent <-->|stdio / JSON-RPC| SubServers
-    SubServers --> Lock
-    SubServers --> Linters
-    Linters --> Pandoc
-    SubServers --> Render
-    SubServers --> Excel
-    SubServers --> DrawIO
-    SubServers --> WebAPIs
+    subgraph ExternalAPIs["External Research & Web APIs"]
+        SemScholar["Semantic Scholar API<br/>(Literature & Citations)"]
+        ArxivAPI["arXiv API<br/>(Preprints)"]
+        TavilyAPI["Tavily Search API<br/>(Live Web Search)"]
+        WikiAPI["Wikipedia REST API<br/>(Encyclopedic Knowledge)"]
+    end
+
+    subgraph PythonEngines["Internal Python Engines & Linters"]
+        OpenPyXL["openpyxl Engine<br/>(Formatted Spreadsheets)"]
+        Linters["In-Memory Linters<br/>(AST & Syntax Validation)"]
+    end
+
+    %% Client connection
+    Agent <-->|stdio / JSON-RPC| Pres
+    Agent <-->|stdio / JSON-RPC| Docs
+    Agent <-->|stdio / JSON-RPC| Research
+    Agent <-->|stdio / JSON-RPC| Sheets
+    Agent <-->|stdio / JSON-RPC| Diagrams
+
+    %% Sub-server specific connections
+    Pres --> Linters
+    Pres --> Pandoc
+    Pres --> LibreOffice
+
+    Docs --> Linters
+    Docs --> Pandoc
+    Docs --> LibreOffice
+
+    Research --> SemScholar
+    Research --> ArxivAPI
+    Research --> TavilyAPI
+    Research --> WikiAPI
+    Research --> Chromium
+
+    Sheets --> OpenPyXL
+
+    Diagrams --> Linters
+    Diagrams --> DrawioCLI
+
+    %% Nord Theme Styling
+    classDef client fill:#2E3440,stroke:#88C0D0,stroke-width:2px,color:#ECEFF4;
+    classDef server fill:#3B4252,stroke:#81A1C1,stroke-width:2px,color:#ECEFF4;
+    classDef engine fill:#434C5E,stroke:#8FBCBB,stroke-width:1.5px,color:#ECEFF4;
+    classDef api fill:#4C566A,stroke:#A3BE8C,stroke-width:1.5px,color:#ECEFF4;
+    classDef internal fill:#434C5E,stroke:#D08770,stroke-width:1.5px,color:#ECEFF4;
+
+    class Agent client;
+    class Pres,Docs,Research,Sheets,Diagrams server;
+    class Pandoc,LibreOffice,Chromium,DrawioCLI engine;
+    class SemScholar,ArxivAPI,TavilyAPI,WikiAPI api;
+    class OpenPyXL,Linters internal;
 ```
 
 ---
