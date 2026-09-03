@@ -11,6 +11,7 @@ The `browser_lifespan` context manager is exported here for use as the FastMCP l
 """
 from __future__ import annotations
 
+import asyncio
 import atexit
 import glob
 import html
@@ -29,9 +30,18 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from playwright.async_api import Browser  # noqa: F401
 
-# Set by the server lifespan when CREPE_HEADLESS_BROWSER_PATH is configured.
-# Tools read this directly — no FastMCP context threading needed.
+# Lazily initialized when fetch_webpage is invoked.
+_playwright_instance: Any = None
 _playwright_browser: Any = None
+_browser_lock: asyncio.Lock | None = None
+_browser_pgid: int | None = None
+
+
+def _get_browser_lock() -> asyncio.Lock:
+    global _browser_lock
+    if _browser_lock is None:
+        _browser_lock = asyncio.Lock()
+    return _browser_lock
 
 
 
@@ -262,12 +272,13 @@ async def fetch_webpage(url: str, max_chars: int = 15000) -> dict:
             ),
         }
 
-    if _playwright_browser is not None:
+    browser = await _ensure_browser()
+    if browser is not None:
         context = None
         try:
             # Each call gets an isolated context (cookies, cache, storage)
             # so concurrent fetches don't interfere with each other.
-            context = await _playwright_browser.new_context(
+            context = await browser.new_context(
                 user_agent="Mozilla/5.0 (compatible; CREPE/1.0)"
             )
             page = await context.new_page()
@@ -313,9 +324,6 @@ async def fetch_webpage(url: str, max_chars: int = 15000) -> dict:
 # server.py (monolith). Import and pass as `lifespan=` to FastMCP.
 # ---------------------------------------------------------------------------
 
-_browser_pgid: int | None = None
-
-
 def _kill_browser_group() -> None:
     """Kill the entire Chromium process group (idempotent).
 
@@ -346,39 +354,24 @@ except (ValueError, AttributeError):
     pass
 
 
-@asynccontextmanager
-async def browser_lifespan(_server: object):  # type: ignore[type-arg]
-    """FastMCP lifespan context manager: manage the Playwright browser lifecycle.
+async def _ensure_browser() -> Any:
+    """Lazily launch Chromium only when fetch_webpage is invoked."""
+    global _playwright_instance, _playwright_browser, _browser_pgid
+    if _playwright_browser is not None:
+        return _playwright_browser
 
-    On startup: launch the system Chromium at CREPE_HEADLESS_BROWSER_PATH
-    (no extra browser download). The browser stays warm across calls; each
-    fetch_webpage call gets its own isolated BrowserContext.
+    async with _get_browser_lock():
+        if _playwright_browser is not None:
+            return _playwright_browser
 
-    Shutdown guarantee (two layers)
-    --------------------------------
-    Layer 1 — module-level SIGTERM/SIGINT handler (_emergency_exit, registered
-    at import time): kills the Chromium process group and calls os._exit(0),
-    bypassing any stuck asyncio teardown.
+        browser_path = os.environ.get("CREPE_HEADLESS_BROWSER_PATH", "").strip()
+        if not browser_path or not os.path.isfile(browser_path):
+            return None
 
-    Layer 2 — atexit fallback: registered once the browser pgid is known.
-
-    PGID discovery
-    --------------
-    Playwright's Python async API does not expose browser.process.pid.
-    We snapshot /tmp/playwright_chromiumdev_profile-* before launch, find the
-    new directory afterwards, then pgrep for processes using it. The lowest PID
-    is the main Chromium process (and its process group leader).
-    """
-    global _browser_pgid
-
-    from playwright.async_api import async_playwright
-
-    browser_path = os.environ.get("CREPE_HEADLESS_BROWSER_PATH", "").strip()
-    pw = None
-    browser = None
-
-    if browser_path and os.path.isfile(browser_path):
+        from playwright.async_api import async_playwright
         pw = await async_playwright().start()
+        _playwright_instance = pw
+
         profiles_before: set[str] = set(
             glob.glob("/tmp/playwright_chromiumdev_profile-*")
         )
@@ -391,7 +384,6 @@ async def browser_lifespan(_server: object):  # type: ignore[type-arg]
                 "--disable-gpu",
             ],
         )
-        global _playwright_browser
         _playwright_browser = browser
 
         profiles_after: set[str] = set(
@@ -411,15 +403,26 @@ async def browser_lifespan(_server: object):  # type: ignore[type-arg]
             except (OSError, ValueError, subprocess.SubprocessError):
                 pass
 
-    atexit.register(_kill_browser_group)
+        atexit.register(_kill_browser_group)
+        return _playwright_browser
 
+
+@asynccontextmanager
+async def browser_lifespan(_server: object):  # type: ignore[type-arg]
+    """FastMCP lifespan context manager: manage the Playwright browser lifecycle.
+
+    Startup is instant: Chromium is lazily launched only when fetch_webpage
+    is invoked. On server shutdown, any running browser instance is stopped.
+    """
     try:
         yield
     finally:
+        global _playwright_browser, _playwright_instance
         _playwright_browser = None
         _kill_browser_group()
-        if pw is not None:
+        if _playwright_instance is not None:
             try:
-                await pw.stop()
+                await _playwright_instance.stop()
             except Exception:
                 pass
+            _playwright_instance = None

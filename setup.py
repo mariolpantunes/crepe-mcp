@@ -22,11 +22,12 @@ from pathlib import Path
 try:
     import yaml
 except ImportError:
-    print("Error: PyYAML is not installed. Run 'pip install pyyaml' or use 'uv run setup.py'.", file=sys.stderr)
+    print("Error: PyYAML is not installed. Run 'python3 -m pip install pyyaml'.", file=sys.stderr)
     sys.exit(1)
 
 
 SCRIPT_DIR = str(Path(__file__).resolve().parent)
+VENV_DIR = Path(SCRIPT_DIR) / "venv"
 AGENTS_MD_SRC = Path(__file__).resolve().parent / "AGENTS.md"
 
 # Target Config Paths
@@ -260,6 +261,30 @@ def remove_shell_profile_block(profile_path: Path) -> None:
         print(f"🧹 Removed CREPE environment variables from profile: {profile_path}")
 
 
+def ensure_venv() -> bool:
+    """Ensure local virtual environment exists and is up to date using native venv + pip."""
+    pip_bin = VENV_DIR / "bin" / "pip"
+    if not pip_bin.exists():
+        print(f"📦 Creating virtual environment at {VENV_DIR} using python3 -m venv...")
+        try:
+            subprocess.run([sys.executable, "-m", "venv", str(VENV_DIR)], check=True)
+        except Exception as exc:
+            print(f"❌ Failed to create virtual environment: {exc}", file=sys.stderr)
+            return False
+
+    print(f"📦 Installing/updating CREPE dependencies in {VENV_DIR} via pip...")
+    try:
+        subprocess.run(
+            [str(pip_bin), "install", "-e", SCRIPT_DIR],
+            check=True,
+        )
+        print(f"✅ Virtual environment ready at {VENV_DIR}")
+        return True
+    except Exception as exc:
+        print(f"❌ Failed to install dependencies via pip: {exc}", file=sys.stderr)
+        return False
+
+
 def update_goose_config(envs: dict[str, str], legacy: bool = False) -> bool:
     """Register or update CREPE MCP server in ~/.config/goose/config.yaml."""
     GOOSE_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
@@ -280,33 +305,35 @@ def update_goose_config(envs: dict[str, str], legacy: bool = False) -> bool:
     if legacy:
         for sub_name, _, _ in SUB_SERVERS:
             extensions.pop(sub_name, None)
+        cmd_path = str(VENV_DIR / "bin" / "crepe-mcp")
         extensions["crepe"] = {
             "enabled": True,
             "type": "stdio",
             "name": "crepe",
             "display_name": "CREPE Presentation Engine",
-            "cmd": "uv",
-            "args": ["--directory", SCRIPT_DIR, "run", "crepe-mcp"],
+            "cmd": cmd_path,
+            "args": [],
             "timeout": 300,
             "envs": envs,
             "env_keys": [],
         }
-        print("📦 Configured Goose mode: Monolith (crepe-mcp, 40 tools)")
+        print(f"📦 Configured Goose mode: Monolith ({cmd_path}, 40 tools)")
     else:
         extensions.pop("crepe", None)
         for sub_name, cmd_name, display in SUB_SERVERS:
+            cmd_path = str(VENV_DIR / "bin" / cmd_name)
             extensions[sub_name] = {
-                "enabled": True,
+                "enabled": False,
                 "type": "stdio",
                 "name": sub_name,
                 "display_name": display,
-                "cmd": "uv",
-                "args": ["--directory", SCRIPT_DIR, "run", cmd_name],
+                "cmd": cmd_path,
+                "args": [],
                 "timeout": 300,
                 "envs": envs,
                 "env_keys": [],
             }
-        print("📦 Configured Goose mode: 5 Separate Sub-Servers")
+        print("📦 Configured Goose mode: 5 Separate Sub-Servers (disabled by default; managed via Extension Manager)")
 
     with open(GOOSE_CONFIG_PATH, "w", encoding="utf-8") as f:
         yaml.safe_dump(config, f, sort_keys=False, allow_unicode=True)
@@ -367,18 +394,20 @@ def update_json_mcp_config(
     if legacy:
         for sub_name, _, _ in SUB_SERVERS:
             mcp_servers.pop(sub_name, None)
+        cmd_path = str(VENV_DIR / "bin" / "crepe-mcp")
         mcp_servers["crepe"] = {
-            "command": "uv",
-            "args": ["--directory", SCRIPT_DIR, "run", "crepe-mcp"],
+            "command": cmd_path,
+            "args": [],
             "env": envs,
         }
-        print(f"📦 Configured {client_name} mode: Monolith (crepe-mcp, 40 tools)")
+        print(f"📦 Configured {client_name} mode: Monolith ({cmd_path}, 40 tools)")
     else:
         mcp_servers.pop("crepe", None)
         for sub_name, cmd_name, _ in SUB_SERVERS:
+            cmd_path = str(VENV_DIR / "bin" / cmd_name)
             mcp_servers[sub_name] = {
-                "command": "uv",
-                "args": ["--directory", SCRIPT_DIR, "run", cmd_name],
+                "command": cmd_path,
+                "args": [],
                 "env": envs,
             }
         print(f"📦 Configured {client_name} mode: 5 Separate Sub-Servers")
@@ -478,7 +507,6 @@ def run_install(args: argparse.Namespace) -> None:
 
     # 1. Dependency checks
     for bin_name, hint in [
-        ("uv", "Install uv from https://docs.astral.sh/uv/"),
         ("pandoc", "Required for PDF/PPTX/DOCX compilation"),
         ("lualatex", "Required for PDF/Beamer output (TeX Live / MacTeX)"),
     ]:
@@ -546,6 +574,11 @@ def run_install(args: argparse.Namespace) -> None:
     )
     if not ss_key and not args.non_interactive:
         ss_key = interactive_prompt_secret("Enter Semantic Scholar API key (or Enter to skip)")
+
+    # 5c. Virtual environment preparation (native venv + pip)
+    if not ensure_venv():
+        print("❌ Installation aborted: failed to set up virtual environment.", file=sys.stderr)
+        sys.exit(1)
 
     # 6. Shell Profile
     profile_path = detect_shell_profile()

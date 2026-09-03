@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "crepe-mcp"
-version = "0.2.1"
+version = "0.2.2"
 authors = [
     {name = "Mário Antunes", email = "mario.antunes@ua.pt"}
 ]
