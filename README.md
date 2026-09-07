@@ -177,6 +177,12 @@ CREPE includes an automated installer script (`setup.py`) that detects your syst
 # Install as a single monolith server (40 tools) instead of 5 sub-servers
 ./setup.py --install --legacy
 
+# Enable all 5 sub-servers up front — REQUIRED for ACP providers such as
+# claude-acp, gemini-cli, cursor-agent or codex, which cannot reach Goose's
+# Extension Manager to switch a disabled sub-server on. See "Sub-server
+# enablement" below.
+./setup.py --install --target goose --enable-all
+
 # Non-interactive installation with API keys and custom paths
 ./setup.py --install -y \
   --tavily-key "tvly-..." \
@@ -195,12 +201,47 @@ CREPE includes an automated installer script (`setup.py`) that detects your syst
 | `--uninstall` | — | False | Remove CREPE MCP servers and clean up profile entries |
 | `--target` | `goose` `claude` `agy` `all` | `all` | Specify which agent configurations to update |
 | `--legacy` | — | False | Install as monolith (`crepe-mcp`) rather than 5 modular sub-servers |
+| `--enable-all` | — | False | Goose only: register every sub-server as `enabled`. Use with ACP providers (`claude-acp`, `gemini-cli`, `cursor-agent`, `codex`) |
 | `-y`, `--non-interactive` | — | False | Accept all defaults and flags without interactive prompts |
 | `--tavily-key` | `KEY` | `""` | Tavily API Key for live web search |
 | `--ss-key` | `KEY` | `""` | Semantic Scholar API Key for literature searches |
 | `--browser-path` | `PATH` | auto | Absolute path to Chromium/Chrome binary for JS page rendering |
 | `--libreoffice-path` | `PATH` | auto | Path to LibreOffice binary for PPTX slide rasterization |
 | `--drawio-path` | `PATH` | auto | Path to draw.io desktop binary for diagram export |
+
+### Sub-server enablement
+
+`setup.py --install` registers all five sub-servers but leaves only
+**crepe-research** enabled. The other four are written with `enabled: false` plus a
+`description` naming their tools and trigger, which Goose's Extension Manager reads
+to switch them on when a task needs them. That keeps ~88% of CREPE's tool schema
+(~4.6k tokens) out of the context window at session start.
+
+**This gating does not work under ACP providers.** With `claude-acp`, `gemini-cli`,
+`cursor-agent` or `codex`, Goose is not the agent — it delegates the loop to an
+external tool and forwards its extensions over ACP. Only `type: mcp` extensions
+survive that hop; the Extension Manager is `type: platform`, so the agent never sees
+`manage_extensions` and can never enable a disabled sub-server.
+
+Measured on Goose 1.49.0 with an identical "build a deck" prompt:
+
+| Provider | Sub-servers | Outcome |
+|:---------|:------------|:--------|
+| `claude-acp` | 4 disabled | 9 fruitless tool searches, nothing produced |
+| `claude-acp` | all enabled | 1 tool search, then the deck compiled |
+| native (e.g. a custom OpenAI-compatible provider) | 4 disabled | agent called `manage_extensions`, enabled them, compiled |
+
+So install with `--enable-all` whenever the active provider is ACP-based:
+
+```bash
+./setup.py --install --target goose --enable-all
+```
+
+Nothing is lost. ACP hosts defer MCP tool *schemas* behind their own tool-search and
+fetch them only on use, so the expensive part (~21 KB / ~5.2k tokens across the 40
+tools) still stays out of context — the same saving, made by the host rather than by
+Goose. Keep the default gated layout only for native Goose providers, where Goose
+loads every enabled schema up front.
 
 ### Environment Variables
 

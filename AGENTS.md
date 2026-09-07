@@ -41,6 +41,37 @@ That keeps roughly 88% of CREPE's tool schema (~4.6k tokens) out of the context
 window at session start, and it is loaded only once a task actually needs it.
 To pin a different set, edit `SUB_SERVERS` in `setup.py` and re-run the install.
 
+### Caveat: ACP providers cannot reach the Extension Manager
+
+On-demand activation only works when the agent can call Goose's
+`extensionmanager__manage_extensions`. Under an **ACP provider** — `claude-acp`,
+`gemini-cli`, `cursor-agent`, `codex` and friends — it cannot. Goose is not the
+agent there; it delegates the loop to an external tool and forwards its
+extensions over ACP. Only `type: mcp` extensions survive that hop. The Extension
+Manager is `type: platform`, implemented inside Goose's own agent loop, so the
+agent never sees `manage_extensions` and a disabled sub-server can never be
+switched on.
+
+Measured on Goose 1.49.0 with the same "build a deck" prompt:
+
+| Provider | Sub-servers | Outcome |
+|----------|-------------|---------|
+| `claude-acp` | 4 disabled | 9 fruitless tool searches, nothing produced |
+| `claude-acp` | all enabled | 1 tool search, then the deck compiled |
+| `custom_skynet` (native) | 4 disabled | agent called `manage_extensions`, enabled them, compiled |
+
+**Install with `--enable-all` when the host is an ACP provider:**
+
+```bash
+python3 setup.py --install --target goose --enable-all
+```
+
+Nothing is lost by doing so. ACP hosts defer MCP tool *schemas* behind their own
+tool-search and fetch them only on use, so the expensive part (~21 KB / ~5.2k
+tokens across the 40 tools) still stays out of context — the same saving, made
+by the host instead of by Goose. Prefer the default (gated) layout only for
+native Goose providers, where Goose loads every enabled schema up front.
+
 ---
 
 ## 2. Recommended Workflow

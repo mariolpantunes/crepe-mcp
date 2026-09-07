@@ -63,6 +63,12 @@ PROFILE_BLOCK_END = "# === End CREPE MCP ==="
 # (cheap, no local binaries, and useful in almost any conversation); the other
 # four stay off so their tool schemas do not occupy context until the Extension
 # Manager activates them on demand.
+#
+# That gating only works where the agent can reach the Extension Manager. Under
+# an ACP provider the agent is the external tool (e.g. Claude Code), and Goose
+# forwards MCP extensions to it but not its own `type: platform` ones — so
+# manage_extensions is unreachable and a disabled sub-server can never be turned
+# on. Install with --enable-all there; see the ACP section in AGENTS.md.
 SUB_SERVERS = [
     {
         "name": "crepe-presentations",
@@ -373,8 +379,13 @@ def ensure_venv() -> bool:
         return False
 
 
-def update_goose_config(envs: dict[str, str], legacy: bool = False) -> bool:
-    """Register or update CREPE MCP server in ~/.config/goose/config.yaml."""
+def update_goose_config(envs: dict[str, str], legacy: bool = False, enable_all: bool = False) -> bool:
+    """Register or update CREPE MCP server in ~/.config/goose/config.yaml.
+
+    `enable_all` turns on every sub-server instead of honouring the per-server
+    `enabled` flag in SUB_SERVERS. Required for hosts that cannot reach Goose's
+    Extension Manager — see the ACP note in AGENTS.md.
+    """
     yaml = load_yaml()
     if yaml is None:
         print("❌ PyYAML unavailable — skipping Goose target. Run 'python3 -m pip install pyyaml'.")
@@ -415,7 +426,7 @@ def update_goose_config(envs: dict[str, str], legacy: bool = False) -> bool:
         for sub in SUB_SERVERS:
             cmd_path = str(VENV_DIR / "bin" / sub["cmd"])
             extensions[sub["name"]] = {
-                "enabled": sub["enabled"],
+                "enabled": True if enable_all else sub["enabled"],
                 "type": "stdio",
                 "name": sub["name"],
                 "description": sub["description"],
@@ -426,11 +437,15 @@ def update_goose_config(envs: dict[str, str], legacy: bool = False) -> bool:
                 "envs": envs,
                 "env_keys": [],
             }
-        always_on = [s["name"] for s in SUB_SERVERS if s["enabled"]]
-        on_demand = [s["name"] for s in SUB_SERVERS if not s["enabled"]]
         print(f"📦 Configured Goose mode: {len(SUB_SERVERS)} Separate Sub-Servers")
-        print(f"   ├─ always on: {', '.join(always_on)}")
-        print(f"   └─ on demand: {', '.join(on_demand)} (activated by the Extension Manager)")
+        if enable_all:
+            print(f"   └─ all enabled: {', '.join(s['name'] for s in SUB_SERVERS)}")
+            print("      (--enable-all: no Extension Manager round-trip needed)")
+        else:
+            always_on = [s["name"] for s in SUB_SERVERS if s["enabled"]]
+            on_demand = [s["name"] for s in SUB_SERVERS if not s["enabled"]]
+            print(f"   ├─ always on: {', '.join(always_on)}")
+            print(f"   └─ on demand: {', '.join(on_demand)} (activated by the Extension Manager)")
 
     with open(GOOSE_CONFIG_PATH, "w", encoding="utf-8") as f:
         yaml.safe_dump(config, f, sort_keys=False, allow_unicode=True)
@@ -701,7 +716,7 @@ def run_install(args: argparse.Namespace) -> None:
     # 8. Update Target Configurations
     legacy = getattr(args, "legacy", False)
     if "goose" in targets:
-        update_goose_config(envs, legacy=legacy)
+        update_goose_config(envs, legacy=legacy, enable_all=getattr(args, "enable_all", False))
         install_agents_md()
 
     if "agy" in targets:
@@ -765,6 +780,15 @@ def main() -> None:
         "--legacy",
         action="store_true",
         help="Install CREPE as a single monolith server (crepe-mcp, 40 tools) instead of 5 separate sub-servers.",
+    )
+    parser.add_argument(
+        "--enable-all",
+        action="store_true",
+        help=(
+            "Goose only: register every sub-server as enabled instead of leaving the "
+            "on-demand ones off. Use with hosts that cannot reach Goose's Extension "
+            "Manager (e.g. the claude-acp / ACP providers) — see AGENTS.md."
+        ),
     )
     parser.add_argument(
         "-y",
