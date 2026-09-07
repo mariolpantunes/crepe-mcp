@@ -22,8 +22,11 @@ from pathlib import Path
 try:
     import yaml
 except ImportError:
-    print("Error: PyYAML is not installed. Run 'python3 -m pip install pyyaml'.", file=sys.stderr)
-    sys.exit(1)
+    # Not fatal: setup.py is normally launched with the *system* interpreter, which
+    # is under no obligation to ship PyYAML. Only the Goose target needs it, and by
+    # the time we get there ensure_venv() has installed it into VENV_DIR as a CREPE
+    # dependency. See load_yaml() for the fallback.
+    yaml = None  # type: ignore[assignment]
 
 
 SCRIPT_DIR = str(Path(__file__).resolve().parent)
@@ -49,13 +52,98 @@ CLAUDE_CODE_PATH = Path.home() / ".claude.json"
 PROFILE_BLOCK_START = "# === CREPE MCP Environment Variables ==="
 PROFILE_BLOCK_END = "# === End CREPE MCP ==="
 
+# Sub-server registry.
+#
+# `description` is not cosmetic: Goose's Extension Manager reads it to decide
+# which extension to enable for a given request, so each one states the tools it
+# provides and the trigger for turning it on. Without it the manager has only the
+# display name to go on and cannot route reliably.
+#
+# `enabled` controls what is loaded at session start. Only Research is always on
+# (cheap, no local binaries, and useful in almost any conversation); the other
+# four stay off so their tool schemas do not occupy context until the Extension
+# Manager activates them on demand.
 SUB_SERVERS = [
-    ("crepe-presentations", "crepe-presentations", "CREPE Presentations"),
-    ("crepe-documents",     "crepe-documents",     "CREPE Documents"),
-    ("crepe-research",      "crepe-research",      "CREPE Research"),
-    ("crepe-spreadsheets",  "crepe-spreadsheets",  "CREPE Spreadsheets"),
-    ("crepe-diagrams",      "crepe-diagrams",      "CREPE Diagrams"),
+    {
+        "name": "crepe-presentations",
+        "cmd": "crepe-presentations",
+        "display": "CREPE Presentations",
+        "enabled": False,
+        "description": (
+            "Author and compile slide decks. Create and edit presentations in Pandoc Markdown, "
+            "lint them, compile to Beamer PDF or PowerPoint (.pptx), and render slides to PNG "
+            "for visual review. ENABLE THIS when the user asks for a presentation, slide deck, "
+            "talk, seminar, defence, or .pptx/Beamer output."
+        ),
+    },
+    {
+        "name": "crepe-documents",
+        "cmd": "crepe-documents",
+        "display": "CREPE Documents",
+        "enabled": False,
+        "description": (
+            "Author and compile A4 documents. Create and edit reports, papers, and theses as "
+            "chapters/sections in Pandoc Markdown, lint them, compile to PDF or Word (.docx), "
+            "and render pages to PNG. ENABLE THIS when the user asks for a report, paper, "
+            "article, deliverable, thesis, or .docx/PDF document."
+        ),
+    },
+    {
+        "name": "crepe-research",
+        "cmd": "crepe-research",
+        "display": "CREPE Research",
+        "enabled": True,
+        "description": (
+            "Academic and web research. Search peer-reviewed papers on Semantic Scholar "
+            "(academic_search) and preprints on arXiv (arxiv_search), run live web searches "
+            "via Tavily (web_search), look up and read Wikipedia articles, and extract the "
+            "full readable text of any URL (fetch_webpage). Use for citations, literature "
+            "review, fact-checking, and gathering current sources."
+        ),
+    },
+    {
+        "name": "crepe-spreadsheets",
+        "cmd": "crepe-spreadsheets",
+        "display": "CREPE Spreadsheets",
+        "enabled": False,
+        "description": (
+            "Create, inspect, and update styled Excel workbooks (.xlsx), including converting "
+            "Markdown tables to Excel and writing cells/formulas. ENABLE THIS when the user "
+            "asks for a spreadsheet, Excel file, workbook, or .xlsx output."
+        ),
+    },
+    {
+        "name": "crepe-diagrams",
+        "cmd": "crepe-diagrams",
+        "display": "CREPE Diagrams",
+        "enabled": False,
+        "description": (
+            "Validate and export draw.io / diagrams.net diagrams to PNG, SVG, or PDF, and "
+            "inspect their page structure. ENABLE THIS when the user asks to work with "
+            ".drawio diagrams or export a diagram to an image."
+        ),
+    },
 ]
+
+
+def load_yaml():
+    """Return the PyYAML module, falling back to the one installed inside VENV_DIR.
+
+    Returns None when PyYAML is reachable from neither interpreter, letting callers
+    skip the Goose target with a warning instead of aborting the whole install.
+    """
+    global yaml
+    if yaml is not None:
+        return yaml
+    for site in sorted(VENV_DIR.glob("lib/python3.*/site-packages")):
+        if site.is_dir() and str(site) not in sys.path:
+            sys.path.insert(0, str(site))
+    try:
+        import yaml as _yaml
+    except ImportError:
+        return None
+    yaml = _yaml
+    return yaml
 
 
 def detect_shell_profile() -> Path:
@@ -287,6 +375,10 @@ def ensure_venv() -> bool:
 
 def update_goose_config(envs: dict[str, str], legacy: bool = False) -> bool:
     """Register or update CREPE MCP server in ~/.config/goose/config.yaml."""
+    yaml = load_yaml()
+    if yaml is None:
+        print("❌ PyYAML unavailable — skipping Goose target. Run 'python3 -m pip install pyyaml'.")
+        return False
     GOOSE_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     config: dict = {}
     if GOOSE_CONFIG_PATH.exists():
@@ -303,8 +395,8 @@ def update_goose_config(envs: dict[str, str], legacy: bool = False) -> bool:
     extensions = config.setdefault("extensions", {})
 
     if legacy:
-        for sub_name, _, _ in SUB_SERVERS:
-            extensions.pop(sub_name, None)
+        for sub in SUB_SERVERS:
+            extensions.pop(sub["name"], None)
         cmd_path = str(VENV_DIR / "bin" / "crepe-mcp")
         extensions["crepe"] = {
             "enabled": True,
@@ -320,20 +412,25 @@ def update_goose_config(envs: dict[str, str], legacy: bool = False) -> bool:
         print(f"📦 Configured Goose mode: Monolith ({cmd_path}, 40 tools)")
     else:
         extensions.pop("crepe", None)
-        for sub_name, cmd_name, display in SUB_SERVERS:
-            cmd_path = str(VENV_DIR / "bin" / cmd_name)
-            extensions[sub_name] = {
-                "enabled": False,
+        for sub in SUB_SERVERS:
+            cmd_path = str(VENV_DIR / "bin" / sub["cmd"])
+            extensions[sub["name"]] = {
+                "enabled": sub["enabled"],
                 "type": "stdio",
-                "name": sub_name,
-                "display_name": display,
+                "name": sub["name"],
+                "description": sub["description"],
+                "display_name": sub["display"],
                 "cmd": cmd_path,
                 "args": [],
                 "timeout": 300,
                 "envs": envs,
                 "env_keys": [],
             }
-        print("📦 Configured Goose mode: 5 Separate Sub-Servers (disabled by default; managed via Extension Manager)")
+        always_on = [s["name"] for s in SUB_SERVERS if s["enabled"]]
+        on_demand = [s["name"] for s in SUB_SERVERS if not s["enabled"]]
+        print(f"📦 Configured Goose mode: {len(SUB_SERVERS)} Separate Sub-Servers")
+        print(f"   ├─ always on: {', '.join(always_on)}")
+        print(f"   └─ on demand: {', '.join(on_demand)} (activated by the Extension Manager)")
 
     with open(GOOSE_CONFIG_PATH, "w", encoding="utf-8") as f:
         yaml.safe_dump(config, f, sort_keys=False, allow_unicode=True)
@@ -345,6 +442,10 @@ def update_goose_config(envs: dict[str, str], legacy: bool = False) -> bool:
 def remove_from_goose_config() -> None:
     """Remove CREPE MCP servers from Goose config."""
     if not GOOSE_CONFIG_PATH.exists():
+        return
+    yaml = load_yaml()
+    if yaml is None:
+        print("⚠️ Warning: PyYAML unavailable — left Goose config untouched.")
         return
     try:
         with open(GOOSE_CONFIG_PATH, encoding="utf-8") as f:
@@ -358,9 +459,9 @@ def remove_from_goose_config() -> None:
     if "crepe" in extensions:
         del extensions["crepe"]
         modified = True
-    for sub, _, _ in SUB_SERVERS:
-        if sub in extensions:
-            del extensions[sub]
+    for sub in SUB_SERVERS:
+        if sub["name"] in extensions:
+            del extensions[sub["name"]]
             modified = True
     if modified:
         with open(GOOSE_CONFIG_PATH, "w", encoding="utf-8") as f:
@@ -392,8 +493,8 @@ def update_json_mcp_config(
     mcp_servers = config.setdefault("mcpServers", {})
 
     if legacy:
-        for sub_name, _, _ in SUB_SERVERS:
-            mcp_servers.pop(sub_name, None)
+        for sub in SUB_SERVERS:
+            mcp_servers.pop(sub["name"], None)
         cmd_path = str(VENV_DIR / "bin" / "crepe-mcp")
         mcp_servers["crepe"] = {
             "command": cmd_path,
@@ -403,9 +504,9 @@ def update_json_mcp_config(
         print(f"📦 Configured {client_name} mode: Monolith ({cmd_path}, 40 tools)")
     else:
         mcp_servers.pop("crepe", None)
-        for sub_name, cmd_name, _ in SUB_SERVERS:
-            cmd_path = str(VENV_DIR / "bin" / cmd_name)
-            mcp_servers[sub_name] = {
+        for sub in SUB_SERVERS:
+            cmd_path = str(VENV_DIR / "bin" / sub["cmd"])
+            mcp_servers[sub["name"]] = {
                 "command": cmd_path,
                 "args": [],
                 "env": envs,
@@ -435,9 +536,9 @@ def remove_from_json_mcp_config(config_path: Path, client_name: str) -> None:
     if "crepe" in mcp_servers:
         del mcp_servers["crepe"]
         modified = True
-    for sub, _, _ in SUB_SERVERS:
-        if sub in mcp_servers:
-            del mcp_servers[sub]
+    for sub in SUB_SERVERS:
+        if sub["name"] in mcp_servers:
+            del mcp_servers[sub["name"]]
             modified = True
     if modified:
         with open(config_path, "w", encoding="utf-8") as f:
