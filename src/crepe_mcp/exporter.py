@@ -98,8 +98,9 @@ def _render_office_to_pngs(
         os.remove(pdf_path)
 
 
-# Public alias — use this in preference to the private `_render_office_to_pngs` name.
+# Public aliases — use these in preference to private names.
 render_via_libreoffice = _render_office_to_pngs
+find_libreoffice = _find_libreoffice
 
 
 def render_pdf_to_pngs(

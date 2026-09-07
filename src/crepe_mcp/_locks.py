@@ -29,28 +29,34 @@ class TicketLock:
     """
 
     def __init__(self) -> None:
-        self._lock = threading.Lock()
-        self._cond = threading.Condition(self._lock)
+        self._cond = threading.Condition(threading.Lock())
         self._next_ticket = 0
         self._now_serving = 0
+        self._cancelled_tickets: set[int] = set()
 
     def __enter__(self) -> TicketLock:
-        self._lock.acquire()
-        ticket = self._next_ticket
-        self._next_ticket += 1
-        try:
-            while self._now_serving != ticket:
-                self._cond.wait()
-        except BaseException:
-            # The reserved slot will never run; advance the counter so that
-            # every waiter behind us is not permanently blocked.
-            self._now_serving += 1
-            self._cond.notify_all()
-            self._lock.release()
-            raise
+        with self._cond:
+            ticket = self._next_ticket
+            self._next_ticket += 1
+            try:
+                while self._now_serving != ticket:
+                    self._cond.wait()
+            except BaseException:
+                if self._now_serving == ticket:
+                    self._advance_now_serving()
+                else:
+                    self._cancelled_tickets.add(ticket)
+                raise
         return self
 
-    def __exit__(self, _exc_type: object, _exc: object, _tb: object) -> None:
+    def _advance_now_serving(self) -> None:
+        """Advance _now_serving, skipping any cancelled tickets (must hold _cond)."""
         self._now_serving += 1
+        while self._now_serving in self._cancelled_tickets:
+            self._cancelled_tickets.discard(self._now_serving)
+            self._now_serving += 1
         self._cond.notify_all()
-        self._lock.release()
+
+    def __exit__(self, _exc_type: object, _exc: object, _tb: object) -> None:
+        with self._cond:
+            self._advance_now_serving()

@@ -22,9 +22,19 @@ if _settings is not None:
 def run_server(mcp: FastMCP) -> None:
     """Run a FastMCP server instance with standard signal and exit handling."""
     def _on_sigint(_signum: int, _frame: object) -> None:
+        try:
+            from crepe_mcp.research import _kill_browser_group
+            _kill_browser_group()
+        except Exception:
+            pass
         sys.exit(0)
 
     def _on_sigterm_early(_signum: int, _frame: object) -> None:
+        try:
+            from crepe_mcp.research import _kill_browser_group
+            _kill_browser_group()
+        except Exception:
+            pass
         os._exit(0)
 
     signal.signal(signal.SIGINT, _on_sigint)

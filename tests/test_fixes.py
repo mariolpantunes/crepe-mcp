@@ -272,6 +272,18 @@ class TestT05AbsolutePathGuard(unittest.TestCase):
         except Exception:
             pass  # Any other error is fine
 
+    def test_presentation_compile_relative_path_raises(self):
+        from crepe_mcp.compiler import CompileError, compile_to_pdf, compile_to_pptx
+        from crepe_mcp.store import new_presentation
+        pres = new_presentation(title="Guard Test")
+        with self.assertRaises(CompileError) as ctx:
+            compile_to_pdf(pres, "relative/test.pdf")
+        self.assertIn("absolute", str(ctx.exception).lower())
+
+        with self.assertRaises(CompileError) as ctx2:
+            compile_to_pptx(pres, "relative/test.pptx")
+        self.assertIn("absolute", str(ctx2.exception).lower())
+
 
 # ---------------------------------------------------------------------------
 # T-06  doc_exporter uses public API, not private name
@@ -285,8 +297,15 @@ class TestT06PublicApi(unittest.TestCase):
         self.assertTrue(hasattr(exp, "render_via_libreoffice"),
                         "render_via_libreoffice not found in exporter module")
 
+    def test_find_libreoffice_is_public(self):
+        import crepe_mcp.exporter as exp
+        self.assertTrue(hasattr(exp, "find_libreoffice"),
+                        "find_libreoffice not found in exporter module")
+        self.assertIs(exp.find_libreoffice, exp._find_libreoffice,
+                      "find_libreoffice must be an alias of _find_libreoffice")
+
     def test_no_private_import_from_exporter(self):
-        """Check via AST that doc_exporter no longer imports _render_pptx_via_libreoffice."""
+        """Check via AST that doc_exporter imports no private (_-prefixed) names from exporter."""
         import ast
         import os
         path = os.path.join(os.path.dirname(__file__), "..", "src", "crepe_mcp", "doc_exporter.py")
@@ -296,7 +315,7 @@ class TestT06PublicApi(unittest.TestCase):
         for node in ast.walk(tree):
             if isinstance(node, ast.ImportFrom) and node.module and "exporter" in node.module:
                 for alias in node.names:
-                    if alias.name == "_render_pptx_via_libreoffice":
+                    if alias.name.startswith("_"):
                         bad_imports.append(alias.name)
         self.assertEqual(bad_imports, [],
                          f"doc_exporter still imports private names: {bad_imports}")
@@ -463,28 +482,101 @@ class TestT08TicketLockInterruptSafety(unittest.TestCase):
 
         lock = TicketLock()
         lock_held_event = threading.Event()
-        done_event = threading.Event()
+        t2_started_event = threading.Event()
+        t3_done_event = threading.Event()
+        order: list[int] = []
 
         # Thread 1 holds lock
         def holder():
             with lock:
                 lock_held_event.set()
+                # Wait until Thread 2 has reached wait and raised
                 time.sleep(0.1)
+                order.append(1)
+
+        # Thread 2 attempts to acquire lock but fails/cancels while waiting
+        orig_wait = lock._cond.wait
+        called_mock = False
+
+        def mock_wait(*args, **kwargs):
+            nonlocal called_mock
+            if not called_mock:
+                called_mock = True
+                raise RuntimeError("Simulated acquire abort / interrupt")
+            return orig_wait(*args, **kwargs)
+
+        def cancelled_waiter():
+            t2_started_event.set()
+            try:
+                with lock:
+                    pass
+            except RuntimeError:
+                order.append(2)
+
+        def subsequent_waiter():
+            with lock:
+                order.append(3)
+                t3_done_event.set()
 
         t1 = threading.Thread(target=holder)
         t1.start()
         lock_held_event.wait()
 
-        # Verify lock can still be acquired afterwards
-        def next_acquirer():
-            with lock:
-                done_event.set()
-
-        t2 = threading.Thread(target=next_acquirer)
+        # Mock wait to simulate interrupt on Thread 2
+        lock._cond.wait = mock_wait
+        t2 = threading.Thread(target=cancelled_waiter)
         t2.start()
         t2.join(timeout=1.0)
+        self.assertIn(2, order, "Thread 2 should catch the simulated interrupt")
+
+        # Restore wait for Thread 3
+        lock._cond.wait = orig_wait
+        t3 = threading.Thread(target=subsequent_waiter)
+        t3.start()
+
         t1.join(timeout=1.0)
-        self.assertTrue(done_event.is_set(), "TicketLock must be acquirable by subsequent threads")
+        t3.join(timeout=1.0)
+
+        self.assertTrue(t3_done_event.is_set(), "Subsequent thread must not deadlock behind cancelled waiter")
+        self.assertEqual(order, [2, 1, 3])
+
+    def test_ticket_lock_strict_fifo_order(self):
+        import threading
+        import time
+
+        from crepe_mcp._locks import TicketLock
+
+        lock = TicketLock()
+        execution_order: list[int] = []
+        lock_held = threading.Event()
+
+        def holder():
+            with lock:
+                lock_held.set()
+                time.sleep(0.1)
+                execution_order.append(0)
+
+        t0 = threading.Thread(target=holder)
+        t0.start()
+        lock_held.wait()
+
+        def worker(num: int):
+            with lock:
+                execution_order.append(num)
+
+        threads = []
+        for i in range(1, 6):
+            t = threading.Thread(target=worker, args=(i,))
+            threads.append(t)
+            t.start()
+            # Small delay ensures deterministic arrival order in queue
+            time.sleep(0.01)
+
+        t0.join(timeout=1.0)
+        for t in threads:
+            t.join(timeout=1.0)
+
+        self.assertEqual(execution_order, [0, 1, 2, 3, 4, 5], "Waiters must execute in strict FIFO arrival order")
 
 
 class TestT09SubServerExports(unittest.TestCase):
@@ -540,6 +632,16 @@ class TestT10RobustnessAndNativeDrawio(unittest.TestCase):
         finally:
             if os.path.isfile(tmp_path):
                 os.remove(tmp_path)
+
+    def test_ensure_browser_resolves_path_from_which(self):
+        import asyncio
+        from unittest.mock import patch
+
+        from crepe_mcp.research import _ensure_browser
+
+        with patch.dict(os.environ, {"CREPE_HEADLESS_BROWSER_PATH": "nonexistent_binary_xyz_123"}):
+            res = asyncio.run(_ensure_browser())
+            self.assertIsNone(res)
 
 
 if __name__ == "__main__":

@@ -18,6 +18,7 @@ import html
 import json
 import os
 import re
+import shutil
 import signal
 import subprocess
 import urllib.error
@@ -365,8 +366,14 @@ async def _ensure_browser() -> Any:
             return _playwright_browser
 
         browser_path = os.environ.get("CREPE_HEADLESS_BROWSER_PATH", "").strip()
-        if not browser_path or not os.path.isfile(browser_path):
+        if not browser_path:
             return None
+        if not os.path.isfile(browser_path):
+            resolved = shutil.which(browser_path)
+            if resolved:
+                browser_path = resolved
+            else:
+                return None
 
         from playwright.async_api import async_playwright
         pw = await async_playwright().start()

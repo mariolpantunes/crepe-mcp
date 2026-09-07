@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import os
 
-from crepe_mcp.exporter import _find_libreoffice, render_pdf_to_pngs, render_via_libreoffice
+from crepe_mcp.exporter import find_libreoffice, render_pdf_to_pngs, render_via_libreoffice
 
 
 def render_document_as_pngs(
@@ -23,7 +23,7 @@ def render_document_as_pngs(
         png_files = render_pdf_to_pngs(artifact_path, output_dir, dpi=dpi)
         return png_files, "pymupdf"
     elif ext in (".docx", ".doc"):
-        cmd = _find_libreoffice()
+        cmd = find_libreoffice()
         if cmd is None:
             raise ImportError("LibreOffice is required to render DOCX documents to PNGs.")
         png_files = render_via_libreoffice(cmd, artifact_path, output_dir, dpi=dpi)

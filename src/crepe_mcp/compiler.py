@@ -47,6 +47,8 @@ def compile_to_pdf(
     timeout: int = 120,
 ) -> None:
     """Compile presentation to a Beamer PDF using lualatex."""
+    if not os.path.isabs(output_path):
+        raise CompileError(f"output_path must be an absolute path, got {output_path!r}")
     if shutil.which(PANDOC) is None:
         raise CompileError("pandoc is not installed or not on PATH")
     if shutil.which("lualatex") is None:
@@ -97,6 +99,8 @@ def compile_to_pptx(
     if non-default values are passed so the caller is not silently misled.
     Use reference_doc (a .pptx template) to control PPTX styling instead.
     """
+    if not os.path.isabs(output_path):
+        raise CompileError(f"output_path must be an absolute path, got {output_path!r}")
     if shutil.which(PANDOC) is None:
         raise CompileError("pandoc is not installed or not on PATH")
     if reference_doc and not os.path.isfile(reference_doc):
