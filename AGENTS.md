@@ -24,16 +24,22 @@ Each sub-server can be registered independently in your agent host:
 
 | Command | Tools | Use when |
 |---------|-------|----------|
-| `uv run crepe-mcp` | 40 (all) | General-purpose agents that need everything |
-| `uv run crepe-presentations` | 15 | Slide deck workflows only |
-| `uv run crepe-documents` | 12 | Report/paper writing only |
-| `uv run crepe-research` | 6 | Research and web browsing only |
-| `uv run crepe-spreadsheets` | 4 | Spreadsheet tasks only |
-| `uv run crepe-diagrams` | 3 | Diagram export/validation only |
+| `venv/bin/crepe-mcp` | 40 (all) | General-purpose agents that need everything |
+| `venv/bin/crepe-presentations` | 15 | Slide deck workflows only |
+| `venv/bin/crepe-documents` | 12 | Report/paper writing only |
+| `venv/bin/crepe-research` | 6 | Research and web browsing only |
+| `venv/bin/crepe-spreadsheets` | 4 | Spreadsheet tasks only |
+| `venv/bin/crepe-diagrams` | 3 | Diagram export/validation only |
 
-The sub-servers registered by `setup.py --install` are disabled by default
-(`enabled: false`) in the Goose config. Enable only the ones you need to keep
-your agent's context window lean.
+`setup.py --install` registers all five sub-servers in the Goose config but only
+leaves **crepe-research** enabled: it needs no local binaries and is useful in
+almost any conversation. The other four are written with `enabled: false` and
+carry a `description` stating what they do and when to turn them on, which is
+what Goose's Extension Manager reads to activate them on demand.
+
+That keeps roughly 88% of CREPE's tool schema (~4.6k tokens) out of the context
+window at session start, and it is loaded only once a task actually needs it.
+To pin a different set, edit `SUB_SERVERS` in `setup.py` and re-run the install.
 
 ---
 

@@ -106,9 +106,10 @@ flowchart TD
 
 ---
 
-## FastMCP 3.X Architecture
+## FastMCP Architecture
 
-Built natively on **FastMCP 3.X**, CREPE provides high-reliability agentic pair-authoring:
+Built natively on **FastMCP** (3.x and 4.x are both supported; the dependency is
+pinned `>=3.0,<5`), CREPE provides high-reliability agentic pair-authoring:
 
 - **Modular Context Efficiency**: Five independent sub-servers allow agents to mount only the tools required for a specific task, keeping LLM context windows lean and focused.
 - **Embedded Agent Instructions**: Initialization prompts inject strict Pandoc Markdown rules, preventing LaTeX syntax hallucinations and formatting errors.
@@ -122,12 +123,12 @@ Built natively on **FastMCP 3.X**, CREPE provides high-reliability agentic pair-
 
 | Sub-server | Command Entry Point | Tools | Primary Domain |
 |:-----------|:--------------------|:-----:|:---------------|
-| **Presentations** | `uv run crepe-presentations` | 15 | Slide deck authoring, Beamer/PPTX compilation, PNG rendering |
-| **Documents** | `uv run crepe-documents` | 12 | A4 reports and papers, LaTeX/DOCX compilation, PNG rendering |
-| **Research** | `uv run crepe-research` | 6 | Semantic Scholar, arXiv, Tavily web search, Wikipedia |
-| **Spreadsheets** | `uv run crepe-spreadsheets` | 4 | Styled Excel workbooks (.xlsx), Markdown table conversion |
-| **Diagrams** | `uv run crepe-diagrams` | 3 | Draw.io XML inspection, linting, and headless image export |
-| **Monolith** | `uv run crepe-mcp` | **40** | Unified server providing all 40 tools in a single process |
+| **Presentations** | `venv/bin/crepe-presentations` | 15 | Slide deck authoring, Beamer/PPTX compilation, PNG rendering |
+| **Documents** | `venv/bin/crepe-documents` | 12 | A4 reports and papers, LaTeX/DOCX compilation, PNG rendering |
+| **Research** | `venv/bin/crepe-research` | 6 | Semantic Scholar, arXiv, Tavily web search, Wikipedia |
+| **Spreadsheets** | `venv/bin/crepe-spreadsheets` | 4 | Styled Excel workbooks (.xlsx), Markdown table conversion |
+| **Diagrams** | `venv/bin/crepe-diagrams` | 3 | Draw.io XML inspection, linting, and headless image export |
+| **Monolith** | `venv/bin/crepe-mcp` | **40** | Unified server providing all 40 tools in a single process |
 
 ### 1. Presentations (`crepe-presentations` — 15 tools)
 Stateful, incremental slide deck builder that compiles Pandoc Markdown into Beamer PDF presentations or PowerPoint files.
