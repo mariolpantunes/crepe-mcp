@@ -4,7 +4,7 @@ Stateful slide deck builder. Manages in-memory presentation state with a fair
 ticket lock per presentation and compiles to Beamer PDF or PowerPoint PPTX.
 
 Can be run as a standalone MCP server:
-    uv run crepe-presentations
+    venv/bin/crepe-presentations
 
 Or imported and mounted in the full CREPE monolith (crepe-mcp), which exposes
 all 40 tools through a single entry point.

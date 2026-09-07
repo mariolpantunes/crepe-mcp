@@ -3,7 +3,7 @@
 draw.io diagram export and validation.
 
 Can be run as a standalone MCP server:
-    uv run crepe-diagrams
+    venv/bin/crepe-diagrams
 
 Or imported and mounted in the full CREPE monolith (crepe-mcp).
 

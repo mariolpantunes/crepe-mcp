@@ -3,7 +3,7 @@
 Excel workbook creation, inspection, and manipulation.
 
 Can be run as a standalone MCP server:
-    uv run crepe-spreadsheets
+    venv/bin/crepe-spreadsheets
 
 Or imported and mounted in the full CREPE monolith (crepe-mcp).
 
@@ -51,7 +51,18 @@ def create_excel(
     sheets: list[dict] | None = None,
     overwrite: bool = True,
 ) -> dict:
-    """Create a new Excel (.xlsx) workbook with styled header rows and data rows."""
+    """Create a new Excel (.xlsx) workbook with styled header rows and data rows.
+
+    output_path must be absolute. Each entry in `sheets` is an object with:
+      name    (str)        — worksheet name
+      headers (list[str])  — column titles, written as a styled header row
+      rows    (list[list]) — data rows; a cell starting with "=" becomes a formula
+
+    Example:
+      sheets=[{"name": "Metrics",
+               "headers": ["Region", "Output"],
+               "rows": [["North", 120], ["South", 95], ["Total", "=SUM(B2:B3)"]]}]
+    """
     return _excel.create_excel(output_path=output_path, sheets=sheets, overwrite=overwrite)
 
 
@@ -68,7 +79,14 @@ def update_excel_sheet(
     append_rows: list[list] | None = None,
     update_cells: dict | None = None,
 ) -> dict:
-    """Update an existing .xlsx sheet by appending rows or setting cell values and formulas."""
+    """Update an existing .xlsx sheet by appending rows or setting cell values and formulas.
+
+    input_path must be absolute and `sheet_name` must already exist in the workbook.
+      append_rows  — rows appended after the last used row, e.g. [["East", 77]]
+      update_cells — object keyed by A1-style coordinate, e.g.
+                     {"B2": 42, "C2": "=SUM(A1:B1)"}; values starting with "="
+                     are stored as formulas.
+    """
     return _excel.update_excel_sheet(
         input_path=input_path, sheet_name=sheet_name, append_rows=append_rows, update_cells=update_cells
     )

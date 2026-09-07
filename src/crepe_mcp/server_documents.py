@@ -4,7 +4,7 @@ A4 report/article/paper builder. Manages in-memory document state and compiles
 to PDF (via Pandoc/lualatex) or Word DOCX.
 
 Can be run as a standalone MCP server:
-    uv run crepe-documents
+    venv/bin/crepe-documents
 
 Or imported and mounted in the full CREPE monolith (crepe-mcp).
 

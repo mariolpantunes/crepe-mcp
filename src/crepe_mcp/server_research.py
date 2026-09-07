@@ -4,7 +4,7 @@ Research and web utilities: Semantic Scholar, arXiv, Tavily web search,
 Wikipedia, and Playwright-powered full-page fetching.
 
 Can be run as a standalone MCP server:
-    uv run crepe-research
+    venv/bin/crepe-research
 
 Or imported and mounted in the full CREPE monolith (crepe-mcp). The Playwright
 browser is managed by `research.browser_lifespan` — the same lifespan function
