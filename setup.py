@@ -17,6 +17,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 try:
@@ -36,8 +37,9 @@ AGENTS_MD_SRC = Path(__file__).resolve().parent / "AGENTS.md"
 # Target Config Paths
 GOOSE_CONFIG_DIR = Path.home() / ".config" / "goose"
 GOOSE_CONFIG_PATH = GOOSE_CONFIG_DIR / "config.yaml"
-GOOSE_CONFIG_BACKUP_PATH = GOOSE_CONFIG_DIR / "config.yaml.bak"
-AGENTS_MD_DST = GOOSE_CONFIG_DIR / "CREPE_AGENTS.md"
+AGENTS_MD_DST = GOOSE_CONFIG_DIR / "CREPE_AGENTS.md"  # legacy install location, only cleaned up
+SKILL_SRC = Path(__file__).resolve().parent / "skills" / "crepe"
+SKILL_DST = Path.home() / ".agents" / "skills" / "crepe"
 
 AGY_CONFIG_DIR = Path.home() / ".gemini" / "config"
 AGY_CONFIG_PATH = AGY_CONFIG_DIR / "mcp_config.json"
@@ -379,8 +381,103 @@ def ensure_venv() -> bool:
         return False
 
 
+def atomic_write(path: Path, text: str, mode: int = 0o600) -> None:
+    """Write `text` to `path` via a temp file + rename, so a crash never leaves a half-written file."""
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(text, encoding="utf-8")
+    os.chmod(tmp, mode)
+    os.replace(tmp, path)
+
+
+def backup_file(path: Path, keep: int = 5) -> Path:
+    """Copy `path` to a timestamped `.bak-*` sibling and prune all but the newest `keep` backups."""
+    dst = path.with_name(f"{path.name}.bak-{time.strftime('%Y%m%d-%H%M%S')}")
+    shutil.copy2(path, dst)
+    os.chmod(dst, 0o600)
+    for old in sorted(path.parent.glob(f"{path.name}.bak-*"))[:-keep]:
+        old.unlink(missing_ok=True)
+    return dst
+
+
+def splice_extensions(text: str, entries: dict, remove: list[str]) -> str | None:
+    """Replace, add and remove extension blocks in raw Goose config text.
+
+    Only the named blocks under the top-level `extensions:` key are touched, so
+    comments, key order and every other setting survive (a PyYAML round-trip would
+    drop them). Returns None when the layout is not the expected block style; the
+    caller then falls back to a full rewrite.
+    """
+    lines = text.splitlines(keepends=True)
+    start = next((i for i, ln in enumerate(lines) if re.match(r"extensions:\s*(#.*)?$", ln)), None)
+    if start is None:
+        return None
+    end = next(
+        (i for i in range(start + 1, len(lines)) if lines[i].strip() and not lines[i].startswith((" ", "#"))),
+        len(lines),
+    )
+    drop = set(entries) | set(remove)
+    kept: list[str] = []
+    skipping = False
+    for ln in lines[start + 1:end]:
+        key = re.match(r"  (\S[^:]*):\s*(#.*)?$", ln)
+        if key:
+            skipping = key.group(1).strip("'\"") in drop
+        elif ln.startswith("  #") or (ln.strip() and not ln.startswith("   ")):
+            skipping = False  # a comment at block indent belongs to the block that follows
+        if not skipping:
+            kept.append(ln)
+    while kept and not kept[-1].strip():
+        kept.pop()
+    added = ""
+    for name, entry in entries.items():
+        dumped = yaml.safe_dump({name: entry}, sort_keys=False, allow_unicode=True)
+        added += "".join("  " + ln if ln.strip() else ln for ln in dumped.splitlines(keepends=True))
+    tail = lines[end:]
+    sep = ["\n"] if tail and tail[0].strip() else []
+    body = "".join(lines[:start + 1] + kept)
+    if kept and not kept[-1].endswith("\n"):
+        body += "\n"
+    return body + added + "".join(sep + tail)
+
+
+def write_goose_extensions(config: dict, entries: dict, remove: list[str]) -> bool:
+    """Apply `entries`/`remove` to the Goose config file, keeping it intact. Returns True if the file changed."""
+    old_text = GOOSE_CONFIG_PATH.read_text(encoding="utf-8") if GOOSE_CONFIG_PATH.exists() else ""
+    new_text = splice_extensions(old_text, entries, remove) if old_text else None
+    if new_text is not None:
+        # Verify the splice: everything except our extension blocks must be unchanged.
+        try:
+            check = yaml.safe_load(new_text) or {}
+            want = {k: v for k, v in config.items() if k != "extensions"}
+            got = {k: v for k, v in check.items() if k != "extensions"}
+            ours = set(entries) | set(remove)
+            ext_old = {k: v for k, v in (config.get("extensions") or {}).items() if k not in ours}
+            ext_new = {k: v for k, v in (check.get("extensions") or {}).items() if k not in entries}
+            ok = want == got and ext_old == ext_new and all(check["extensions"].get(k) == v for k, v in entries.items())
+        except Exception:
+            ok = False
+        if not ok:
+            print("⚠️ Targeted edit did not verify; falling back to a full rewrite (comments will be lost).")
+            new_text = None
+    if new_text is None:
+        extensions = config.setdefault("extensions", {})
+        for name in remove:
+            extensions.pop(name, None)
+        extensions.update(entries)
+        new_text = yaml.safe_dump(config, sort_keys=False, allow_unicode=True)
+    if new_text == old_text:
+        return False
+    atomic_write(GOOSE_CONFIG_PATH, new_text)
+    return True
+
+
 def update_goose_config(envs: dict[str, str], legacy: bool = False, enable_all: bool = False) -> bool:
     """Register or update CREPE MCP server in ~/.config/goose/config.yaml.
+
+    Only the CREPE blocks are edited; the rest of the file is left as it was. A
+    timestamped backup is taken first. An extension the user already toggled keeps
+    its `enabled` state on re-install, unless `enable_all` is given, and env values
+    already in the config (API keys, paths) are kept unless a new value is passed.
 
     `enable_all` turns on every sub-server instead of honouring the per-server
     `enabled` flag in SUB_SERVERS. Required for hosts that cannot reach Goose's
@@ -396,61 +493,70 @@ def update_goose_config(envs: dict[str, str], legacy: bool = False, enable_all: 
         try:
             with open(GOOSE_CONFIG_PATH, encoding="utf-8") as f:
                 config = yaml.safe_load(f) or {}
+            if not isinstance(config, dict):
+                raise ValueError("top level is not a mapping")
         except Exception as e:
             print(f"❌ Failed to parse existing {GOOSE_CONFIG_PATH}: {e}")
             return False
-        shutil.copy2(GOOSE_CONFIG_PATH, GOOSE_CONFIG_BACKUP_PATH)
-        os.chmod(GOOSE_CONFIG_BACKUP_PATH, 0o600)
-        print(f"🗂️  Backed up Goose config to {GOOSE_CONFIG_BACKUP_PATH}")
+        print(f"🗂️  Backed up Goose config to {backup_file(GOOSE_CONFIG_PATH)}")
 
-    extensions = config.setdefault("extensions", {})
-
+    existing = config.get("extensions") or {}
+    # Re-installing must not drop settings (e.g. API keys) that this run was not given again.
+    for name in ["crepe"] + [sub["name"] for sub in SUB_SERVERS]:
+        previous_envs = (existing.get(name) or {}).get("envs")
+        if isinstance(previous_envs, dict) and previous_envs:
+            envs = {**previous_envs, **envs}
+            break
     if legacy:
-        for sub in SUB_SERVERS:
-            extensions.pop(sub["name"], None)
+        remove = [sub["name"] for sub in SUB_SERVERS]
         cmd_path = str(VENV_DIR / "bin" / "crepe-mcp")
-        extensions["crepe"] = {
-            "enabled": True,
-            "type": "stdio",
-            "name": "crepe",
-            "display_name": "CREPE Presentation Engine",
-            "cmd": cmd_path,
-            "args": [],
-            "timeout": 300,
-            "envs": envs,
-            "env_keys": [],
-        }
-        print(f"📦 Configured Goose mode: Monolith ({cmd_path}, 40 tools)")
-    else:
-        extensions.pop("crepe", None)
-        for sub in SUB_SERVERS:
-            cmd_path = str(VENV_DIR / "bin" / sub["cmd"])
-            extensions[sub["name"]] = {
-                "enabled": True if enable_all else sub["enabled"],
+        entries = {
+            "crepe": {
+                "enabled": True,
                 "type": "stdio",
-                "name": sub["name"],
-                "description": sub["description"],
-                "display_name": sub["display"],
+                "name": "crepe",
+                "display_name": "CREPE Presentation Engine",
                 "cmd": cmd_path,
                 "args": [],
                 "timeout": 300,
                 "envs": envs,
                 "env_keys": [],
             }
+        }
+        print(f"📦 Configured Goose mode: Monolith ({cmd_path}, 40 tools)")
+    else:
+        remove = ["crepe"]
+        entries = {}
+        for sub in SUB_SERVERS:
+            previous = existing.get(sub["name"], {})
+            enabled = True if enable_all else previous.get("enabled", sub["enabled"])
+            entries[sub["name"]] = {
+                "enabled": bool(enabled),
+                "type": "stdio",
+                "name": sub["name"],
+                "description": sub["description"],
+                "display_name": sub["display"],
+                "cmd": str(VENV_DIR / "bin" / sub["cmd"]),
+                "args": [],
+                "timeout": 300,
+                "envs": envs,
+                "env_keys": [],
+            }
         print(f"📦 Configured Goose mode: {len(SUB_SERVERS)} Separate Sub-Servers")
-        if enable_all:
-            print(f"   └─ all enabled: {', '.join(s['name'] for s in SUB_SERVERS)}")
-            print("      (--enable-all: no Extension Manager round-trip needed)")
-        else:
-            always_on = [s["name"] for s in SUB_SERVERS if s["enabled"]]
-            on_demand = [s["name"] for s in SUB_SERVERS if not s["enabled"]]
-            print(f"   ├─ always on: {', '.join(always_on)}")
-            print(f"   └─ on demand: {', '.join(on_demand)} (activated by the Extension Manager)")
+        on = [n for n, e in entries.items() if e["enabled"]]
+        off = [n for n, e in entries.items() if not e["enabled"]]
+        print(f"   ├─ enabled: {', '.join(on) or 'none'}")
+        print(f"   └─ on demand: {', '.join(off) or 'none'} (activated by the Extension Manager)")
 
-    with open(GOOSE_CONFIG_PATH, "w", encoding="utf-8") as f:
-        yaml.safe_dump(config, f, sort_keys=False, allow_unicode=True)
-    os.chmod(GOOSE_CONFIG_PATH, 0o600)
-    print(f"✅ Registered CREPE in Goose config: {GOOSE_CONFIG_PATH}")
+    try:
+        changed = write_goose_extensions(config, entries, remove)
+    except OSError as e:
+        print(f"❌ Could not write {GOOSE_CONFIG_PATH}: {e}")
+        return False
+    if changed:
+        print(f"✅ Registered CREPE in Goose config: {GOOSE_CONFIG_PATH}")
+    else:
+        print("✅ Goose config already up to date")
     return True
 
 
@@ -469,19 +575,16 @@ def remove_from_goose_config() -> None:
         print(f"⚠️ Warning: Failed to parse {GOOSE_CONFIG_PATH}: {e}")
         return
 
-    extensions = config.get("extensions", {})
-    modified = False
-    if "crepe" in extensions:
-        del extensions["crepe"]
-        modified = True
-    for sub in SUB_SERVERS:
-        if sub["name"] in extensions:
-            del extensions[sub["name"]]
-            modified = True
-    if modified:
-        with open(GOOSE_CONFIG_PATH, "w", encoding="utf-8") as f:
-            yaml.safe_dump(config, f, sort_keys=False, allow_unicode=True)
-        print(f"🧹 Removed CREPE from Goose config: {GOOSE_CONFIG_PATH}")
+    names = ["crepe"] + [sub["name"] for sub in SUB_SERVERS]
+    if not any(n in (config.get("extensions") or {}) for n in names):
+        return
+    backup_file(GOOSE_CONFIG_PATH)
+    try:
+        write_goose_extensions(config, {}, names)
+    except OSError as e:
+        print(f"⚠️ Warning: Could not write {GOOSE_CONFIG_PATH}: {e}")
+        return
+    print(f"🧹 Removed CREPE from Goose config: {GOOSE_CONFIG_PATH}")
 
 
 def update_json_mcp_config(
@@ -561,20 +664,41 @@ def remove_from_json_mcp_config(config_path: Path, client_name: str) -> None:
         print(f"🧹 Removed CREPE from {client_name} config: {config_path}")
 
 
-def install_agents_md() -> None:
-    """Copy AGENTS.md to ~/.config/goose/CREPE_AGENTS.md if Goose directory exists."""
-    if not AGENTS_MD_SRC.is_file():
-        return
-    GOOSE_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(AGENTS_MD_SRC, AGENTS_MD_DST)
-    print(f"📖 Installed CREPE agent guide: {AGENTS_MD_DST}")
+def install_skill() -> bool:
+    """Install the crepe skill into ~/.agents/skills/crepe, with AGENTS.md as references/guide.md.
+
+    The copy is built next to the destination and swapped in, so a failure leaves
+    any previous install untouched.
+    """
+    if not (SKILL_SRC / "SKILL.md").is_file():
+        print(f"⚠️ Warning: skill source not found at {SKILL_SRC}; skipping skill install.")
+        return False
+    tmp = SKILL_DST.with_name(SKILL_DST.name + ".tmp")
+    try:
+        SKILL_DST.parent.mkdir(parents=True, exist_ok=True)
+        shutil.rmtree(tmp, ignore_errors=True)
+        shutil.copytree(SKILL_SRC, tmp, ignore=shutil.ignore_patterns("__pycache__"))
+        if AGENTS_MD_SRC.is_file():
+            (tmp / "references").mkdir(exist_ok=True)
+            shutil.copy2(AGENTS_MD_SRC, tmp / "references" / "guide.md")
+        shutil.rmtree(SKILL_DST, ignore_errors=True)
+        os.replace(tmp, SKILL_DST)
+    except OSError as e:
+        shutil.rmtree(tmp, ignore_errors=True)
+        print(f"❌ Could not install the CREPE skill: {e}", file=sys.stderr)
+        return False
+    print(f"🧠 Installed CREPE agent skill: {SKILL_DST}")
+    return True
 
 
-def remove_agents_md() -> None:
-    """Remove CREPE_AGENTS.md on uninstall."""
+def remove_skill() -> None:
+    """Remove the crepe skill, and the CREPE_AGENTS.md copy that older installs left in the Goose config dir."""
+    if SKILL_DST.exists():
+        shutil.rmtree(SKILL_DST, ignore_errors=True)
+        print(f"🧹 Removed CREPE agent skill: {SKILL_DST}")
     if AGENTS_MD_DST.exists():
         AGENTS_MD_DST.unlink()
-        print(f"🧹 Removed CREPE agent guide: {AGENTS_MD_DST}")
+        print(f"🧹 Removed legacy CREPE agent guide: {AGENTS_MD_DST}")
 
 
 def interactive_prompt(prompt_text: str, default_val: str = "") -> str:
@@ -715,9 +839,15 @@ def run_install(args: argparse.Namespace) -> None:
 
     # 8. Update Target Configurations
     legacy = getattr(args, "legacy", False)
+    failed: list[str] = []
     if "goose" in targets:
-        update_goose_config(envs, legacy=legacy, enable_all=getattr(args, "enable_all", False))
-        install_agents_md()
+        if not update_goose_config(envs, legacy=legacy, enable_all=getattr(args, "enable_all", False)):
+            failed.append("Goose config")
+        if not install_skill():
+            failed.append("CREPE skill")
+        if AGENTS_MD_DST.exists():
+            AGENTS_MD_DST.unlink()
+            print(f"🧹 Removed legacy CREPE agent guide (replaced by the skill): {AGENTS_MD_DST}")
 
     if "agy" in targets:
         update_json_mcp_config(AGY_CONFIG_PATH, "AGY CLI", envs, legacy=legacy)
@@ -728,6 +858,10 @@ def run_install(args: argparse.Namespace) -> None:
         if CLAUDE_CODE_PATH.exists():
             update_json_mcp_config(CLAUDE_CODE_PATH, "Claude Code", envs, legacy=legacy)
 
+    if failed:
+        print(f"\n⚠️ CREPE installed with problems: {', '.join(failed)} failed (see messages above).", file=sys.stderr)
+        print(f"💡 To apply environment variables immediately in your current shell:\n    source {profile_path}")
+        sys.exit(1)
     print("\n🎉 CREPE MCP server installation completed successfully!")
     print(f"💡 To apply environment variables immediately in your current shell:\n    source {profile_path}")
 
@@ -740,7 +874,7 @@ def run_uninstall(args: argparse.Namespace) -> None:
 
     if "goose" in targets:
         remove_from_goose_config()
-        remove_agents_md()
+        remove_skill()
 
     if "agy" in targets:
         remove_from_json_mcp_config(AGY_CONFIG_PATH, "AGY CLI")

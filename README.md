@@ -209,6 +209,20 @@ CREPE includes an automated installer script (`setup.py`) that detects your syst
 | `--libreoffice-path` | `PATH` | auto | Path to LibreOffice binary for PPTX slide rasterization |
 | `--drawio-path` | `PATH` | auto | Path to draw.io desktop binary for diagram export |
 
+### Resilient install
+
+Re-running `setup.py --install` is safe:
+
+- Only the CREPE blocks of `~/.config/goose/config.yaml` are edited. Comments, key order and every other setting stay as they were. If the file has an unexpected layout the script verifies the edit and falls back to a full rewrite.
+- A timestamped backup (`config.yaml.bak-YYYYMMDD-HHMMSS`, newest 5 kept) is written first, and the new file is swapped in atomically.
+- An extension you already enabled or disabled keeps that state, and existing `envs` values (API keys, paths) are kept unless you pass a new value.
+- The `crepe` agent skill is copied to `~/.agents/skills/crepe/` (see below). It replaces the old `~/.config/goose/CREPE_AGENTS.md` copy, which is removed.
+- If a step fails the script prints which one and exits non-zero instead of reporting success.
+
+### Agent skill
+
+`skills/crepe/SKILL.md` is a short router for agents: which extension to enable for a task, the tool order, and the basic rules. `setup.py --install` copies it to `~/.agents/skills/crepe/` and adds `AGENTS.md` as `references/guide.md`. Goose lists installed skills in the agent prompt, so the agent learns about CREPE even while its extensions are still disabled.
+
 ### Sub-server enablement
 
 `setup.py --install` registers all five sub-servers but leaves only
