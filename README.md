@@ -119,7 +119,7 @@ pinned `>=3.0,<5`), CREPE provides high-reliability agentic pair-authoring:
 
 ---
 
-## Sub-Servers & Tools Overview (40 Tools Total)
+## Sub-Servers & Tools Overview (5 Servers, 40 Tools)
 
 | Sub-server | Command Entry Point | Tools | Primary Domain |
 |:-----------|:--------------------|:-----:|:---------------|
@@ -128,7 +128,6 @@ pinned `>=3.0,<5`), CREPE provides high-reliability agentic pair-authoring:
 | **Research** | `venv/bin/crepe-research` | 6 | Semantic Scholar, arXiv, Tavily web search, Wikipedia |
 | **Spreadsheets** | `venv/bin/crepe-spreadsheets` | 4 | Styled Excel workbooks (.xlsx), Markdown table conversion |
 | **Diagrams** | `venv/bin/crepe-diagrams` | 3 | Draw.io XML inspection, linting, and headless image export |
-| **Monolith** | `venv/bin/crepe-mcp` | **40** | Unified server providing all 40 tools in a single process |
 
 ### 1. Presentations (`crepe-presentations` — 15 tools)
 Stateful, incremental slide deck builder that compiles Pandoc Markdown into Beamer PDF presentations or PowerPoint files.
@@ -174,9 +173,6 @@ CREPE includes an automated installer script (`setup.py`) that detects your syst
 # Install specifically for Goose
 ./setup.py --install --target goose
 
-# Install as a single monolith server (40 tools) instead of 5 sub-servers
-./setup.py --install --legacy
-
 # Enable all 5 sub-servers up front — REQUIRED for ACP providers such as
 # claude-acp, gemini-cli, cursor-agent or codex, which cannot reach Goose's
 # Extension Manager to switch a disabled sub-server on. See "Sub-server
@@ -200,7 +196,6 @@ CREPE includes an automated installer script (`setup.py`) that detects your syst
 | `--install` | — | True | Register CREPE MCP servers with client configurations |
 | `--uninstall` | — | False | Remove CREPE MCP servers and clean up profile entries |
 | `--target` | `goose` `claude` `agy` `all` | `all` | Specify which agent configurations to update |
-| `--legacy` | — | False | Install as monolith (`crepe-mcp`) rather than 5 modular sub-servers |
 | `--enable-all` | — | False | Goose only: register every sub-server as `enabled`. Use with ACP providers (`claude-acp`, `gemini-cli`, `cursor-agent`, `codex`) |
 | `-y`, `--non-interactive` | — | False | Accept all defaults and flags without interactive prompts |
 | `--tavily-key` | `KEY` | `""` | Tavily API Key for live web search |

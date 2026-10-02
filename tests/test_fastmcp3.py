@@ -1,7 +1,6 @@
 """Unit tests for FastMCP 3.X features: instructions, resources, prompts, and mounting."""
 from __future__ import annotations
 
-import asyncio
 import os
 import sys
 import unittest
@@ -14,7 +13,6 @@ if SRC_DIR not in sys.path:
 
 from crepe_mcp.doc_store import new_document
 from crepe_mcp.exporter import _render_office_to_pngs
-from crepe_mcp.server import mcp as monolith_mcp
 from crepe_mcp.server_diagrams import (
     drawio_diagram_prompt,
 )
@@ -51,11 +49,6 @@ from crepe_mcp.store import new_presentation, upsert_slide
 
 class TestFastMCPInstructions(unittest.TestCase):
     """Test that all servers carry FastMCP 3.x instructions for agent guidance."""
-
-    def test_monolith_instructions_present(self):
-        self.assertTrue(bool(monolith_mcp.instructions))
-        self.assertIn("Pandoc Markdown", monolith_mcp.instructions)
-        self.assertIn("lint_", monolith_mcp.instructions)
 
     def test_subservers_instructions_present(self):
         servers = [
@@ -139,13 +132,6 @@ class TestLibreOfficeProfileIsolation(unittest.TestCase):
         self.assertIn("--headless", cmd)
         self.assertIn("--convert-to", cmd)
 
-
-class TestMonolithToolCount(unittest.TestCase):
-    """Test that monolith exports all 40 sub-server tools."""
-
-    def test_all_tools_mounted(self):
-        tools = asyncio.run(monolith_mcp.list_tools())
-        self.assertEqual(len(tools), 40)
 
 
 if __name__ == "__main__":

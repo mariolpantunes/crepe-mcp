@@ -16,7 +16,6 @@
 | **D** | `create_document` · `get/set_chapter` · `set_section` · `delete_chapter` · `update/list_documents` · `export_document_source` · `compile_document` · `render_document_as_pngs` · `cleanup_document` | `crepe-documents` | A4 report/article builder |
 | **E** | `create_excel` · `inspect_excel` · `update_excel_sheet` · `markdown_table_to_excel` | `crepe-spreadsheets` | Excel workbook |
 | **F** | `lint_presentation` · `lint_document` · `lint_drawio` | (with their group) | Pre-compile content validation |
-| **All** | 40 tools | `crepe-mcp` | Full monolith (all groups) |
 
 ## 1b. Server Entry Points
 
@@ -24,7 +23,6 @@ Each sub-server can be registered independently in your agent host:
 
 | Command | Tools | Use when |
 |---------|-------|----------|
-| `venv/bin/crepe-mcp` | 40 (all) | General-purpose agents that need everything |
 | `venv/bin/crepe-presentations` | 15 | Slide deck workflows only |
 | `venv/bin/crepe-documents` | 12 | Report/paper writing only |
 | `venv/bin/crepe-research` | 6 | Research and web browsing only |

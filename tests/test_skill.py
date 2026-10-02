@@ -149,6 +149,24 @@ class GooseConfigTests(unittest.TestCase):
         self.assertEqual(cfg["GOOSE_MODE"], "auto")
         self.assertIn("crepe-presentations", cfg["extensions"])
 
+    def test_stale_monolith_entry_is_dropped_on_install(self):
+        self.setup.GOOSE_CONFIG_PATH.write_text("extensions:\n  crepe:\n    enabled: true\n    cmd: /old/crepe-mcp\n")
+        self.assertTrue(self.setup.update_goose_config({}))
+        cfg = self.load()
+        self.assertNotIn("crepe", cfg["extensions"])
+        self.assertIn("crepe-presentations", cfg["extensions"])
+
+    def test_stale_monolith_entry_is_dropped_from_json_config(self):
+        import json
+
+        path = Path(self.tmp.name) / "mcp.json"
+        path.write_text(json.dumps({"mcpServers": {"crepe": {"command": "/old/crepe-mcp"}, "other": {"command": "x"}}}))
+        self.assertTrue(self.setup.update_json_mcp_config(path, "Test", {}))
+        servers = json.loads(path.read_text())["mcpServers"]
+        self.assertNotIn("crepe", servers)
+        self.assertEqual(servers["other"], {"command": "x"})
+        self.assertEqual({s["name"] for s in self.setup.SUB_SERVERS} - set(servers), set())
+
     def test_unparsable_config_is_left_alone(self):
         self.setup.GOOSE_CONFIG_PATH.write_text("extensions: [unclosed\n")
         self.assertFalse(self.setup.update_goose_config({}))

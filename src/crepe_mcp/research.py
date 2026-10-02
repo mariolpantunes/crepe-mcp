@@ -321,8 +321,7 @@ async def fetch_webpage(url: str, max_chars: int = 15000) -> dict:
     return {"content": content, "warning": warning}
 
 # ---------------------------------------------------------------------------
-# Browser lifespan — shared between server_research.py (standalone) and
-# server.py (monolith). Import and pass as `lifespan=` to FastMCP.
+# Browser lifespan — used by server_research.py. Pass as `lifespan=` to FastMCP.
 # ---------------------------------------------------------------------------
 
 def _kill_browser_group() -> None:

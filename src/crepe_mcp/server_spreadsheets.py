@@ -5,8 +5,6 @@ Excel workbook creation, inspection, and manipulation.
 Can be run as a standalone MCP server:
     venv/bin/crepe-spreadsheets
 
-Or imported and mounted in the full CREPE monolith (crepe-mcp).
-
 Tools
 -----
 Group E (4):

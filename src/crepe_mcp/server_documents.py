@@ -6,8 +6,6 @@ to PDF (via Pandoc/lualatex) or Word DOCX.
 Can be run as a standalone MCP server:
     venv/bin/crepe-documents
 
-Or imported and mounted in the full CREPE monolith (crepe-mcp).
-
 Tools
 -----
 Group D (11):

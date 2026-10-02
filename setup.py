@@ -471,7 +471,7 @@ def write_goose_extensions(config: dict, entries: dict, remove: list[str]) -> bo
     return True
 
 
-def update_goose_config(envs: dict[str, str], legacy: bool = False, enable_all: bool = False) -> bool:
+def update_goose_config(envs: dict[str, str], enable_all: bool = False) -> bool:
     """Register or update CREPE MCP server in ~/.config/goose/config.yaml.
 
     Only the CREPE blocks are edited; the rest of the file is left as it was. A
@@ -507,46 +507,29 @@ def update_goose_config(envs: dict[str, str], legacy: bool = False, enable_all: 
         if isinstance(previous_envs, dict) and previous_envs:
             envs = {**previous_envs, **envs}
             break
-    if legacy:
-        remove = [sub["name"] for sub in SUB_SERVERS]
-        cmd_path = str(VENV_DIR / "bin" / "crepe-mcp")
-        entries = {
-            "crepe": {
-                "enabled": True,
-                "type": "stdio",
-                "name": "crepe",
-                "display_name": "CREPE Presentation Engine",
-                "cmd": cmd_path,
-                "args": [],
-                "timeout": 300,
-                "envs": envs,
-                "env_keys": [],
-            }
+    # "crepe" is the removed monolith entry of older installs: always drop it.
+    remove = ["crepe"]
+    entries = {}
+    for sub in SUB_SERVERS:
+        previous = existing.get(sub["name"], {})
+        enabled = True if enable_all else previous.get("enabled", sub["enabled"])
+        entries[sub["name"]] = {
+            "enabled": bool(enabled),
+            "type": "stdio",
+            "name": sub["name"],
+            "description": sub["description"],
+            "display_name": sub["display"],
+            "cmd": str(VENV_DIR / "bin" / sub["cmd"]),
+            "args": [],
+            "timeout": 300,
+            "envs": envs,
+            "env_keys": [],
         }
-        print(f"📦 Configured Goose mode: Monolith ({cmd_path}, 40 tools)")
-    else:
-        remove = ["crepe"]
-        entries = {}
-        for sub in SUB_SERVERS:
-            previous = existing.get(sub["name"], {})
-            enabled = True if enable_all else previous.get("enabled", sub["enabled"])
-            entries[sub["name"]] = {
-                "enabled": bool(enabled),
-                "type": "stdio",
-                "name": sub["name"],
-                "description": sub["description"],
-                "display_name": sub["display"],
-                "cmd": str(VENV_DIR / "bin" / sub["cmd"]),
-                "args": [],
-                "timeout": 300,
-                "envs": envs,
-                "env_keys": [],
-            }
-        print(f"📦 Configured Goose mode: {len(SUB_SERVERS)} Separate Sub-Servers")
-        on = [n for n, e in entries.items() if e["enabled"]]
-        off = [n for n, e in entries.items() if not e["enabled"]]
-        print(f"   ├─ enabled: {', '.join(on) or 'none'}")
-        print(f"   └─ on demand: {', '.join(off) or 'none'} (activated by the Extension Manager)")
+    print(f"📦 Configured Goose mode: {len(SUB_SERVERS)} Separate Sub-Servers")
+    on = [n for n, e in entries.items() if e["enabled"]]
+    off = [n for n, e in entries.items() if not e["enabled"]]
+    print(f"   ├─ enabled: {', '.join(on) or 'none'}")
+    print(f"   └─ on demand: {', '.join(off) or 'none'} (activated by the Extension Manager)")
 
     try:
         changed = write_goose_extensions(config, entries, remove)
@@ -591,7 +574,6 @@ def update_json_mcp_config(
     config_path: Path,
     client_name: str,
     envs: dict[str, str],
-    legacy: bool = False,
 ) -> bool:
     """Register or update CREPE in standard JSON mcpServers format (AGY CLI / Claude)."""
     config_path.parent.mkdir(parents=True, exist_ok=True)
@@ -610,26 +592,15 @@ def update_json_mcp_config(
 
     mcp_servers = config.setdefault("mcpServers", {})
 
-    if legacy:
-        for sub in SUB_SERVERS:
-            mcp_servers.pop(sub["name"], None)
-        cmd_path = str(VENV_DIR / "bin" / "crepe-mcp")
-        mcp_servers["crepe"] = {
+    mcp_servers.pop("crepe", None)  # removed monolith entry of older installs
+    for sub in SUB_SERVERS:
+        cmd_path = str(VENV_DIR / "bin" / sub["cmd"])
+        mcp_servers[sub["name"]] = {
             "command": cmd_path,
             "args": [],
             "env": envs,
         }
-        print(f"📦 Configured {client_name} mode: Monolith ({cmd_path}, 40 tools)")
-    else:
-        mcp_servers.pop("crepe", None)
-        for sub in SUB_SERVERS:
-            cmd_path = str(VENV_DIR / "bin" / sub["cmd"])
-            mcp_servers[sub["name"]] = {
-                "command": cmd_path,
-                "args": [],
-                "env": envs,
-            }
-        print(f"📦 Configured {client_name} mode: 5 Separate Sub-Servers")
+    print(f"📦 Configured {client_name} mode: 5 Separate Sub-Servers")
 
     with open(config_path, "w", encoding="utf-8") as f:
         json.dump(config, f, indent=2, ensure_ascii=False)
@@ -838,10 +809,9 @@ def run_install(args: argparse.Namespace) -> None:
         envs["CREPE_DRAWIO_PATH"] = drawio_path
 
     # 8. Update Target Configurations
-    legacy = getattr(args, "legacy", False)
     failed: list[str] = []
     if "goose" in targets:
-        if not update_goose_config(envs, legacy=legacy, enable_all=getattr(args, "enable_all", False)):
+        if not update_goose_config(envs, enable_all=getattr(args, "enable_all", False)):
             failed.append("Goose config")
         if not install_skill():
             failed.append("CREPE skill")
@@ -850,13 +820,13 @@ def run_install(args: argparse.Namespace) -> None:
             print(f"🧹 Removed legacy CREPE agent guide (replaced by the skill): {AGENTS_MD_DST}")
 
     if "agy" in targets:
-        update_json_mcp_config(AGY_CONFIG_PATH, "AGY CLI", envs, legacy=legacy)
+        update_json_mcp_config(AGY_CONFIG_PATH, "AGY CLI", envs)
 
     if "claude" in targets:
         claude_path = CLAUDE_MACOS_PATH if sys.platform == "darwin" else CLAUDE_LINUX_PATH
-        update_json_mcp_config(claude_path, "Claude Desktop", envs, legacy=legacy)
+        update_json_mcp_config(claude_path, "Claude Desktop", envs)
         if CLAUDE_CODE_PATH.exists():
-            update_json_mcp_config(CLAUDE_CODE_PATH, "Claude Code", envs, legacy=legacy)
+            update_json_mcp_config(CLAUDE_CODE_PATH, "Claude Code", envs)
 
     if failed:
         print(f"\n⚠️ CREPE installed with problems: {', '.join(failed)} failed (see messages above).", file=sys.stderr)
@@ -909,11 +879,6 @@ def main() -> None:
         choices=["all", "goose", "claude", "agy"],
         default=["all"],
         help="Target client hosts to configure (default: all detected).",
-    )
-    parser.add_argument(
-        "--legacy",
-        action="store_true",
-        help="Install CREPE as a single monolith server (crepe-mcp, 40 tools) instead of 5 separate sub-servers.",
     )
     parser.add_argument(
         "--enable-all",

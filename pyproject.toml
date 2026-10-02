@@ -4,11 +4,11 @@ build-backend = "hatchling.build"
 
 [project]
 name = "crepe-mcp"
-version = "0.2.3"
+version = "0.3.0"
 authors = [
     {name = "Mário Antunes", email = "mario.antunes@ua.pt"}
 ]
-description = "CREPE — Compile, Research, Export, Presentation Engine. An MCP server for AI Agents that drafts slide decks in Pandoc Markdown, compiles them to Beamer PDF or PowerPoint, renders PNGs for visual validation, and pulls research from Semantic Scholar, the web, and Wikipedia."
+description = "CREPE — Compile, Research, Export, Presentation Engine. Five MCP sub-servers for AI Agents that draft slide decks in Pandoc Markdown, compiles them to Beamer PDF or PowerPoint, renders PNGs for visual validation, and pulls research from Semantic Scholar, the web, and Wikipedia."
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "MIT" }
@@ -36,7 +36,6 @@ Repository = "https://github.com/mariolpantunes/crepe-mcp"
 Issues = "https://github.com/mariolpantunes/crepe-mcp/issues"
 
 [project.scripts]
-crepe-mcp           = "crepe_mcp.server:main"
 crepe-presentations = "crepe_mcp.server_presentations:main"
 crepe-documents     = "crepe_mcp.server_documents:main"
 crepe-research      = "crepe_mcp.server_research:main"

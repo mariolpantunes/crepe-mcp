@@ -580,14 +580,7 @@ class TestT08TicketLockInterruptSafety(unittest.TestCase):
 
 
 class TestT09SubServerExports(unittest.TestCase):
-    """T-09: Verify all sub-servers and monolith export expected tools."""
-
-    def test_monolith_exports_40_tools(self):
-        import asyncio
-
-        from crepe_mcp.server import mcp as full_mcp
-        tools = asyncio.run(full_mcp.list_tools())
-        self.assertEqual(len(tools), 40)
+    """T-09: Verify all sub-servers export expected tools."""
 
     def test_subserver_instances_have_correct_tool_counts(self):
         import asyncio
