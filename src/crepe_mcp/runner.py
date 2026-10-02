@@ -9,6 +9,8 @@ from typing import TYPE_CHECKING, Any
 
 import fastmcp
 
+from crepe_mcp.config import load_env
+
 if TYPE_CHECKING:
     from fastmcp import FastMCP
 
@@ -21,6 +23,8 @@ if _settings is not None:
 
 def run_server(mcp: FastMCP) -> None:
     """Run a FastMCP server instance with standard signal and exit handling."""
+    load_env()
+
     def _on_sigint(_signum: int, _frame: object) -> None:
         try:
             from crepe_mcp.research import _kill_browser_group
