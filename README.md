@@ -111,7 +111,7 @@ flowchart TD
 Built natively on **FastMCP** (3.x and 4.x are both supported; the dependency is
 pinned `>=3.0,<5`), CREPE provides high-reliability agentic pair-authoring:
 
-- **Modular Context Efficiency**: Five independent sub-servers allow agents to mount only the tools required for a specific task, keeping LLM context windows lean and focused.
+- **Modular Context Efficiency**: Six independent sub-servers allow agents to mount only the tools required for a specific task, keeping LLM context windows lean and focused.
 - **Embedded Agent Instructions**: Initialization prompts inject strict Pandoc Markdown rules, preventing LaTeX syntax hallucinations and formatting errors.
 - **Deterministic Concurrency**: FIFO ticket locks and `expected_slide_count` guards prevent race conditions when agents spawn concurrent sub-agents to draft sections simultaneously.
 - **Live Inspectable Resources**: Real-time URIs (`presentation://{id}/source`, `document://{id}/config`) enable instant state inspection without tool-call overhead.
@@ -119,7 +119,7 @@ pinned `>=3.0,<5`), CREPE provides high-reliability agentic pair-authoring:
 
 ---
 
-## Sub-Servers & Tools Overview (5 Servers, 40 Tools)
+## Sub-Servers & Tools Overview (6 Servers, 48 Tools)
 
 | Sub-server | Command Entry Point | Tools | Primary Domain |
 |:-----------|:--------------------|:-----:|:---------------|
@@ -128,6 +128,7 @@ pinned `>=3.0,<5`), CREPE provides high-reliability agentic pair-authoring:
 | **Research** | `venv/bin/crepe-research` | 6 | Semantic Scholar, arXiv, Tavily web search, Wikipedia |
 | **Spreadsheets** | `venv/bin/crepe-spreadsheets` | 4 | Styled Excel workbooks (.xlsx), Markdown table conversion |
 | **Diagrams** | `venv/bin/crepe-diagrams` | 3 | Draw.io XML inspection, linting, and headless image export |
+| **Reader** | `venv/bin/crepe-reader` | 8 | Deterministic reading of PDF, DOCX, ODT, EPUB, HTML, LaTeX, Markdown, PPTX, XLSX: outline, pages, search, tables, equations |
 
 ### 1. Presentations (`crepe-presentations` — 15 tools)
 Stateful, incremental slide deck builder that compiles Pandoc Markdown into Beamer PDF presentations or PowerPoint files.
@@ -158,6 +159,14 @@ Inspection, deep linting, and export for `.drawio` diagram files.
 - **Validation**: `inspect_drawio` (metadata and page structure), `lint_drawio` (validates cell hierarchy, decompresses XML, checks base IDs).
 - **Export**: `export_drawio` (headless rasterization to transparent high-DPI PNG, SVG, or PDF).
 
+### 6. Reader (`crepe-reader` — 8 tools)
+Reads existing documents without any model, so an agent can work on a long file in small pieces. A file is read once into a store of pages, sections, paragraphs and numbered items (cached under the system temp folder, `CREPE_SCRATCH_BASE`); each tool returns a piece of it.
+- **Orientation**: `open_document` (title, parts of a PDF bundle, outline with pages, counts of figures, tables, equations).
+- **Reading**: `read_pages` (about 12,000 characters per call, with a continuation cursor), `read_section` (by outline heading), `search_document`.
+- **Numbered items**: `list_assets` and `get_asset` return figures, tables (as Markdown), equations (text and TeX), algorithms, listings and references, with the sentences that cite them.
+- **Output**: `render_page_png` (a PDF page as an image) and `document_to_markdown` (the whole document as an editable `.md`).
+- **Formats**: PDF through PyMuPDF (layout rules relative to each document's own type sizes); DOCX, ODT, RTF, EPUB, HTML, LaTeX, reStructuredText, Markdown, Org, Jupyter, PPTX, XLSX and CSV through pandoc's AST. Formats without pages are cut into logical pages of about 3,500 characters. `CREPE_READER_ROOTS` can restrict the readable folders.
+
 ---
 
 ## Setup & Configuration
@@ -173,7 +182,7 @@ CREPE includes an automated installer script (`setup.py`) that detects your syst
 # Install specifically for Goose
 ./setup.py --install --target goose
 
-# Enable all 5 sub-servers up front — REQUIRED for ACP providers such as
+# Enable all 6 sub-servers up front — REQUIRED for ACP providers such as
 # claude-acp, gemini-cli, cursor-agent or codex, which cannot reach Goose's
 # Extension Manager to switch a disabled sub-server on. See "Sub-server
 # enablement" below.
@@ -216,8 +225,8 @@ Re-running `setup.py --install` is safe:
 
 ### Sub-server enablement
 
-`setup.py --install` registers all five sub-servers but leaves only
-**crepe-research** enabled. The other four are written with `enabled: false` plus a
+`setup.py --install` registers all six sub-servers but leaves only
+**crepe-research** enabled. The other five are written with `enabled: false` plus a
 `description` naming their tools and trigger, which Goose's Extension Manager reads
 to switch them on when a task needs them. That keeps ~88% of CREPE's tool schema
 (~4.6k tokens) out of the context window at session start.
@@ -243,7 +252,7 @@ So install with `--enable-all` whenever the active provider is ACP-based:
 ```
 
 Nothing is lost. ACP hosts defer MCP tool *schemas* behind their own tool-search and
-fetch them only on use, so the expensive part (~21 KB / ~5.2k tokens across the 40
+fetch them only on use, so the expensive part (~21 KB / ~5.2k tokens across the 48
 tools) still stays out of context — the same saving, made by the host rather than by
 Goose. Keep the default gated layout only for native Goose providers, where Goose
 loads every enabled schema up front.

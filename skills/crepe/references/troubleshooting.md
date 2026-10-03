@@ -4,7 +4,7 @@ Read when: a CREPE tool is missing, a compile fails, a call returns an error, or
 
 ## The tools are not there
 
-CREPE is five MCP servers: `crepe-presentations`, `crepe-documents`, `crepe-research`, `crepe-spreadsheets`, `crepe-diagrams`. Each runs from `<crepe-mcp repo>/venv/bin/<name>`.
+CREPE is six MCP servers: `crepe-presentations`, `crepe-documents`, `crepe-research`, `crepe-spreadsheets`, `crepe-diagrams`, `crepe-reader`. Each runs from `<crepe-mcp repo>/venv/bin/<name>`.
 
 - Goose gates them: only `crepe-research` is on by default, the rest are `enabled: false` with a description. Turn one on with `manage_extensions` (action `enable`).
 - Hosts that run Goose through an ACP provider (`claude-acp`, `gemini-cli`, `cursor-agent`, `codex`) cannot reach `manage_extensions`, so disabled servers can never be switched on. The user must install with `./setup.py --install --target goose --enable-all`. Those hosts defer tool schemas behind their own tool search, so search by tool name (for example `compile_presentation`).
@@ -24,6 +24,9 @@ CREPE is five MCP servers: `crepe-presentations`, `crepe-documents`, `crepe-rese
 | Lint `parse_error` with a line number | The line is relative to that slide or section. Check unbalanced fences (``` or `:::`) and unescaped `$`. |
 | lualatex fails but lint passed | Read the first `!` line of the error: a missing package or font, or an unsupported character in the text. Remove the construct rather than adding LaTeX. |
 | `render_*_as_pngs` fails | The matching compile did not run first, or PPTX/DOCX rendering has no LibreOffice. PDF rendering needs nothing extra. |
+| `open_document` says `Pass the absolute path` / `outside the folders` | Give the absolute path; if `CREPE_READER_ROOTS` is set, the file must be inside one of those folders. |
+| `open_document` says pandoc could not read the file | Wrong extension or a damaged file; for PDF no pandoc is needed. |
+| Reader pages say `no text layer` | A scanned PDF: use `render_page_png`; text cannot be extracted. |
 | `export_drawio` fails | draw.io is not installed or `CREPE_DRAWIO_PATH` is wrong; or the file failed `lint_drawio`. |
 | `web_search` returns `warning` | `CREPE_TAVILY_API_KEY` is missing from the `.env`. Report it; use other tools. |
 | `fetch_webpage` warns about a browser | No Chromium at `CREPE_HEADLESS_BROWSER_PATH`: the text may lack JavaScript content. |

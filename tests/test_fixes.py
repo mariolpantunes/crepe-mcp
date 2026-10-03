@@ -588,6 +588,7 @@ class TestT09SubServerExports(unittest.TestCase):
         from crepe_mcp.server_diagrams import mcp as diag_mcp
         from crepe_mcp.server_documents import mcp as docs_mcp
         from crepe_mcp.server_presentations import mcp as pres_mcp
+        from crepe_mcp.server_reader import mcp as reader_mcp
         from crepe_mcp.server_research import mcp as res_mcp
         from crepe_mcp.server_spreadsheets import mcp as xl_mcp
 
@@ -596,6 +597,7 @@ class TestT09SubServerExports(unittest.TestCase):
         self.assertEqual(len(asyncio.run(res_mcp.list_tools())), 6)
         self.assertEqual(len(asyncio.run(xl_mcp.list_tools())), 4)
         self.assertEqual(len(asyncio.run(diag_mcp.list_tools())), 3)
+        self.assertEqual(len(asyncio.run(reader_mcp.list_tools())), 8)
 
 
 class TestT10RobustnessAndNativeDrawio(unittest.TestCase):

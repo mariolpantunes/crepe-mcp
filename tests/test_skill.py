@@ -65,7 +65,7 @@ def tool_names() -> set[str]:
     import importlib
 
     names: set[str] = set()
-    for server in ("presentations", "documents", "research", "spreadsheets", "diagrams"):
+    for server in ("presentations", "documents", "research", "spreadsheets", "diagrams", "reader"):
         mod = importlib.import_module(f"crepe_mcp.server_{server}")
         names |= {t.name for t in asyncio.run(mod.mcp.list_tools())}
     return names
@@ -118,10 +118,10 @@ class SkillTests(unittest.TestCase):
         text = "\n".join(p.read_text() for p in self.SKILL_DIR.rglob("*.md"))
         verbs = (
             "create|set|get|lint|compile|render|cleanup|export|import|inspect|update|delete|move|duplicate|list"
-            "|search|fetch|markdown"
+            "|search|fetch|markdown|open|read|document"
         )
         mentioned = set(re.findall(rf"\b((?:{verbs})_[a-z_]+)\b", text))
-        parameters = {"update_cells", "markdown_table"}
+        parameters = {"update_cells", "markdown_table", "document_id"}
         self.assertEqual(sorted(mentioned - known - parameters), [], "unknown tool names in the skill")
         self.assertEqual(sorted(n for n in known if n not in text), [], "tools missing from the skill")
 

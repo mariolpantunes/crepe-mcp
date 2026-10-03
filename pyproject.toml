@@ -8,11 +8,11 @@ version = "0.3.0"
 authors = [
     {name = "Mário Antunes", email = "mario.antunes@ua.pt"}
 ]
-description = "CREPE — Compile, Research, Export, Presentation Engine. Five MCP sub-servers for AI Agents that draft slide decks in Pandoc Markdown, compiles them to Beamer PDF or PowerPoint, renders PNGs for visual validation, and pulls research from Semantic Scholar, the web, and Wikipedia."
+description = "CREPE — Compile, Research, Export, Presentation Engine. Six MCP sub-servers for AI Agents that read existing documents and draft slide decks in Pandoc Markdown, compiles them to Beamer PDF or PowerPoint, renders PNGs for visual validation, and pulls research from Semantic Scholar, the web, and Wikipedia."
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "MIT" }
-keywords = ["mcp", "presentation", "pandoc", "beamer", "pptx", "research"]
+keywords = ["mcp", "presentation", "pandoc", "beamer", "pptx", "research", "pdf", "document-reader"]
 dependencies = [
     "fastmcp>=3.0,<5",
     "playwright>=1.40",
@@ -36,6 +36,7 @@ crepe-documents     = "crepe_mcp.server_documents:main"
 crepe-research      = "crepe_mcp.server_research:main"
 crepe-spreadsheets  = "crepe_mcp.server_spreadsheets:main"
 crepe-diagrams      = "crepe_mcp.server_diagrams:main"
+crepe-reader        = "crepe_mcp.server_reader:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/crepe_mcp"]

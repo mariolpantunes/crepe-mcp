@@ -120,6 +120,19 @@ SUB_SERVERS = [
         ),
     },
     {
+        "name": "crepe-reader",
+        "cmd": "crepe-reader",
+        "display": "CREPE Reader",
+        "enabled": False,
+        "description": (
+            "Read and analyse existing documents without an LLM: PDF, DOCX, ODT, EPUB, HTML, LaTeX, "
+            "Markdown, PPTX, XLSX. Returns the outline, pages, sections, search hits and numbered "
+            "figures, tables and equations as text, renders PDF pages to PNG, and converts a document to "
+            "Markdown. ENABLE THIS when the user gives you a file to read, summarise, review, cite from "
+            "or reuse in a deck or report."
+        ),
+    },
+    {
         "name": "crepe-diagrams",
         "cmd": "crepe-diagrams",
         "display": "CREPE Diagrams",
@@ -632,7 +645,7 @@ def update_json_mcp_config(
             "args": [],
             "env": envs,
         }
-    print(f"📦 Configured {client_name} mode: 5 Separate Sub-Servers")
+    print(f"📦 Configured {client_name} mode: {len(SUB_SERVERS)} Separate Sub-Servers")
 
     with open(config_path, "w", encoding="utf-8") as f:
         json.dump(config, f, indent=2, ensure_ascii=False)

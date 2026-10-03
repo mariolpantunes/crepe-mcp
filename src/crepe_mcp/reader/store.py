@@ -1,4 +1,4 @@
-"""Per-paper SQLite store: extraction results are persisted once and queried per request.
+"""Per-document SQLite store: extraction results are persisted once and queried per request.
 
 The store lives in `<scratch>/store/<sha256[:16]>/paper.sqlite`, keyed by the PDF content, so a
 replaced PDF with the same name gets a fresh store and two different PDFs never share one. It is
@@ -22,116 +22,18 @@ from typing import Any
 
 import pymupdf as fitz
 
+from crepe_mcp.reader import pandoc_reader
 from crepe_mcp.reader.assets import build_assets
+from crepe_mcp.reader.common import PANDOC_FORMATS
 from crepe_mcp.reader.config import scratch_base
 from crepe_mcp.reader.document import extract, measure
 from crepe_mcp.reader.heuristics import DIGEST as HEURISTICS_DIGEST
 from crepe_mcp.reader.indexes import build_indexes
+from crepe_mcp.reader.schema import SCHEMA
 from crepe_mcp.reader.structure import build_structure
 
 EXTRACTOR_VERSION = "32"
 MAX_OPEN_STORES = 8
-
-SCHEMA = """
-CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
-CREATE TABLE pages (
-    page INTEGER PRIMARY KEY,
-    width REAL NOT NULL,
-    height REAL NOT NULL,
-    label TEXT NOT NULL,
-    source TEXT NOT NULL,
-    images INTEGER NOT NULL,
-    drawings INTEGER NOT NULL,
-    markup_annots INTEGER NOT NULL,
-    chars INTEGER NOT NULL,
-    text TEXT NOT NULL
-);
-CREATE TABLE lines (
-    id INTEGER PRIMARY KEY,
-    page INTEGER NOT NULL REFERENCES pages (page),
-    seq INTEGER NOT NULL,
-    region TEXT NOT NULL,
-    col INTEGER NOT NULL,
-    x0 REAL NOT NULL,
-    y0 REAL NOT NULL,
-    x1 REAL NOT NULL,
-    y1 REAL NOT NULL,
-    text TEXT NOT NULL,
-    font TEXT NOT NULL,
-    size REAL NOT NULL,
-    bold INTEGER NOT NULL,
-    italic INTEGER NOT NULL,
-    mono INTEGER NOT NULL,
-    color INTEGER NOT NULL
-);
-CREATE INDEX lines_by_page ON lines (page, seq);
-CREATE INDEX lines_by_region ON lines (region, page);
-CREATE TABLE paragraphs (
-    id INTEGER PRIMARY KEY,
-    page INTEGER NOT NULL,
-    last_page INTEGER NOT NULL,
-    kind TEXT NOT NULL,
-    section INTEGER NOT NULL,
-    first_line INTEGER NOT NULL,
-    last_line INTEGER NOT NULL,
-    text TEXT NOT NULL
-);
-CREATE INDEX paragraphs_by_page ON paragraphs (page, id);
-CREATE TABLE sections (
-    id INTEGER PRIMARY KEY,
-    parent INTEGER NOT NULL,
-    level INTEGER NOT NULL,
-    number TEXT NOT NULL,
-    title TEXT NOT NULL,
-    page INTEGER NOT NULL,
-    paragraph INTEGER NOT NULL
-);
-CREATE VIRTUAL TABLE paragraph_search USING fts5 (
-    text, content = 'paragraphs', content_rowid = 'id', tokenize = 'unicode61 remove_diacritics 2'
-);
-CREATE TABLE segments (
-    id INTEGER PRIMARY KEY,
-    kind TEXT NOT NULL,
-    first_page INTEGER NOT NULL,
-    last_page INTEGER NOT NULL,
-    label TEXT NOT NULL,
-    evidence TEXT NOT NULL
-);
-CREATE TABLE structure (key TEXT PRIMARY KEY, value TEXT NOT NULL);
-CREATE TABLE assets (
-    segment INTEGER NOT NULL,
-    id TEXT NOT NULL,
-    kind TEXT NOT NULL,
-    number TEXT NOT NULL,
-    label TEXT NOT NULL,
-    page INTEGER NOT NULL,
-    last_page INTEGER NOT NULL,
-    x0 REAL,
-    y0 REAL,
-    x1 REAL,
-    y1 REAL,
-    caption TEXT NOT NULL,
-    content TEXT NOT NULL,
-    content_format TEXT NOT NULL,
-    method TEXT NOT NULL,
-    confidence TEXT NOT NULL,
-    paragraph INTEGER NOT NULL,
-    seq INTEGER NOT NULL,
-    PRIMARY KEY (segment, id)
-);
-CREATE INDEX assets_by_kind ON assets (kind, seq);
-CREATE TABLE mentions (
-    id INTEGER PRIMARY KEY,
-    segment INTEGER NOT NULL,
-    asset TEXT NOT NULL,
-    paragraph INTEGER NOT NULL,
-    page INTEGER NOT NULL,
-    text TEXT NOT NULL,
-    strength TEXT NOT NULL
-);
-CREATE INDEX mentions_by_asset ON mentions (segment, asset, paragraph);
-CREATE TABLE state (key TEXT PRIMARY KEY, value TEXT NOT NULL);
-"""
 
 _FINGERPRINTS: dict[tuple[str, int, int], str] = {}
 _OPEN: OrderedDict[str, DocumentStore] = OrderedDict()
@@ -152,12 +54,32 @@ def fingerprint(pdf_path: Path) -> str:
 
 
 def _expected_meta(pdf: Path) -> dict[str, str]:
+    if pdf.suffix.lower() != ".pdf":
+        return {
+            "fingerprint": fingerprint(pdf),
+            "extractor_version": EXTRACTOR_VERSION,
+            "pandoc_version": pandoc_reader.pandoc_version(),
+        }
     return {
         "fingerprint": fingerprint(pdf),
         "extractor_version": EXTRACTOR_VERSION,
         "pymupdf_version": str(fitz.VersionBind),
         "heuristics": HEURISTICS_DIGEST,
     }
+
+
+def _build_with_pandoc(path: Path, db: Path, expected: dict[str, str]) -> None:
+    """Build the store of a non-PDF file; like the PDF build, written aside and renamed into place."""
+    db.parent.mkdir(parents=True, exist_ok=True)
+    os.chmod(db.parent, 0o700)
+    tmp = db.with_name(f".{db.name}.{os.getpid()}.{threading.get_ident()}.tmp")
+    tmp.unlink(missing_ok=True)
+    try:
+        pandoc_reader.build(path, PANDOC_FORMATS[path.suffix.lower()], tmp, expected)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
+    os.replace(tmp, db)
 
 
 def _build(pdf: Path, db: Path) -> None:
@@ -273,10 +195,10 @@ class DocumentStore:
 
     @classmethod
     def open(cls, pdf_path: str | Path) -> DocumentStore:
-        """Open the store for a PDF, building or rebuilding it when missing or stale."""
+        """Open the store for a document, building or rebuilding it when missing or stale."""
         pdf = Path(pdf_path).resolve()
         if not pdf.is_file():
-            raise FileNotFoundError(f"PDF not found: {pdf.name}")
+            raise FileNotFoundError(f"Document not found: {pdf.name}")
         with _LOCK:
             expected = _expected_meta(pdf)
             db = scratch_base() / "store" / expected["fingerprint"][:16] / "paper.sqlite"
@@ -288,7 +210,10 @@ class DocumentStore:
                     return cached
                 cached.close()
             if not (db.is_file() and cls._file_matches(db, expected)):
-                _build(pdf, db)
+                if pdf.suffix.lower() == ".pdf":
+                    _build(pdf, db)
+                else:
+                    _build_with_pandoc(pdf, db, expected)
             store = cls(db, expected)
             _OPEN[key] = store
             while len(_OPEN) > MAX_OPEN_STORES:
