@@ -313,6 +313,18 @@ pre-commit install                                   # hooks mirror CI
 
 ---
 
+## Release notes
+
+### 0.3.0 (breaking)
+
+- **Monolith removed.** The all-in-one `crepe-mcp` server and `setup.py --legacy` are gone; use the six sub-servers (`crepe-presentations`, `crepe-documents`, `crepe-research`, `crepe-spreadsheets`, `crepe-diagrams`, `crepe-reader`). `./setup.py --install` and `--uninstall` also remove the stale `crepe` entry old installs wrote.
+- **API keys live in a `.env` file**, loaded by the servers (`$CREPE_ENV_FILE`, `~/.config/crepe-mcp/.env`, `./.env`). `setup.py` no longer reads `keys.md`, accepts `--tavily-key`/`--ss-key`, or writes keys into client configs. Move any key still present in an old client config into the `.env` and rotate it.
+- **New `crepe-reader` sub-server** (8 tools) that reads PDF, DOCX, ODT, EPUB, HTML, LaTeX, Markdown, PPTX, XLSX and more.
+- **`AGENTS.md` replaced by the `crepe` agent skill** (`skills/crepe/`, Agent Skills format), installed to `~/.agents/skills/crepe/` by `setup.py`.
+- Tooling: `requirements.txt` and the `dev` extra removed (`pip install . --group test`), pre-commit and CI share one gate with a coverage floor, and a hook rejects key-like literals.
+
+---
+
 ## License
 
 MIT © Mário Antunes
