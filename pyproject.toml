@@ -21,15 +21,10 @@ dependencies = [
     "openpyxl>=3.1.0",
 ]
 
-[project.optional-dependencies]
-dev = [
-    "ruff",
-    "basedpyright",
-    "vulture",
-    "pre-commit",
-    "build",
-    "twine",
-]
+[dependency-groups]
+# Installed into ./venv next to the package (`pip install . --group test`, pip >= 25.1).
+# ruff, basedpyright, vulture and pre-commit run from the system install; CI pins the same versions.
+test = ["coverage>=7.16,<8"]
 
 [project.urls]
 Repository = "https://github.com/mariolpantunes/crepe-mcp"
@@ -62,6 +57,8 @@ ignore = ["B008"]
 [tool.basedpyright]
 typeCheckingMode = "standard"
 include = ["src/crepe_mcp"]
+venvPath = "."
+venv = "venv"
 reportImportCycles = "none"
 reportReturnType = "none"
 

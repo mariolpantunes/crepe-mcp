@@ -40,7 +40,25 @@ repos:
         name: no API keys in the tree
         entry: '(tvly-[A-Za-z0-9_-]{16,}|_API_KEY[^A-Za-z0-9_]{0,3}[:=][^A-Za-z0-9_-]{0,4}[A-Za-z0-9_-]{20,})'
         language: pygrep
-        exclude: '^(uv\.lock|\.env\.example)$'
+        exclude: '^\.env\.example$'
+
+      # Resolve ./venv the way the runner does, before anything reads it. CI installs the project
+      # into a clean machine; a venv with an editable crepe-mcp would satisfy the requirement while
+      # loading unreleased source, so a local check could pass against code the servers (which run
+      # from venv/bin/crepe-*) never see. Editable installs are removed first, which `pip install`
+      # cannot do for itself. Installs the package plus the `test` dependency group (pip >= 25.1).
+      - id: venv-matches-ci
+        name: venv matches CI
+        entry: >-
+          bash -c '
+          [ -d venv ] || python3 -m venv venv;
+          eds=$(venv/bin/pip list --editable --format=freeze 2>/dev/null
+          | sed "s/[=@ ].*//" | grep -vix crepe-mcp || true);
+          [ -n "$eds" ] && venv/bin/pip uninstall -y -q $eds;
+          venv/bin/pip install -q --upgrade . --group test'
+        language: system
+        files: '(\.py$|^pyproject\.toml$)'
+        pass_filenames: false
 
       - id: ruff
         name: ruff
@@ -65,7 +83,19 @@ repos:
 
       - id: unittest
         name: unittest (tests)
-        entry: env PYTHONPATH=src python3 -m unittest discover -s tests -p "test_*.py" -v
+        entry: env PYTHONPATH=src venv/bin/python -m unittest discover -s tests -p "test_*.py"
+        language: system
+        files: '(\.py$|^pyproject\.toml$)'
+        pass_filenames: false
+
+      - id: coverage
+        name: coverage (unittest, --fail-under)
+        # Same run as `unittest`, measured, kept separate so a coverage drop reads as a coverage
+        # failure. The floor ratchets up only: never lower it to make a commit pass.
+        entry: >-
+          bash -c 'PYTHONPATH=src venv/bin/python -m coverage run --source=crepe_mcp
+          -m unittest discover -s tests -q && venv/bin/python -m coverage report
+          --fail-under=46'
         language: system
         files: '(\.py$|^pyproject\.toml$)'
         pass_filenames: false

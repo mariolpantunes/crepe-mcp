@@ -10,7 +10,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-SKILL = ROOT / "skills" / "crepe" / "SKILL.md"
+SKILL = ROOT / ".agents" / "skills" / "crepe" / "SKILL.md"
 
 CONFIG = """\
 # my goose config

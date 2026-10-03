@@ -209,8 +209,12 @@ tempCodeRunnerFile.py
 # Zed
 .zed/
 
-# AI coding agents (local config/state dirs, not project source)
-.agents/
+# AI coding agents (local config/state dirs, not project source).
+# .agents/ holds untracked local files (PLAN.md, TODO.md, mcp_config.json): only the shipped
+# skill and agent prompts are tracked, so a local config can never be committed by accident.
+.agents/*
+!.agents/skills/
+!.agents/prompts/
 .claude/
 .goose/
 .cursor/

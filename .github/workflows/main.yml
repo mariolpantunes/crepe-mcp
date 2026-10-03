@@ -22,10 +22,15 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: "pip"
 
+      # Same setup as the pre-commit hooks: lint tools from the system (pinned to the versions the
+      # hooks run), the package and coverage in ./venv, which basedpyright is pointed at.
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install ".[dev]"
+          pip install ruff==0.16.9 basedpyright==1.40.1 vulture==2.16
+          python -m venv venv
+          venv/bin/pip install --upgrade pip
+          venv/bin/pip install . --group test
 
       - name: No API keys in the tree
         run: "! git grep -nIE '(tvly-[A-Za-z0-9_-]{16,}|_API_KEY[^A-Za-z0-9_]{0,3}[:=][^A-Za-z0-9_-]{0,4}[A-Za-z0-9_-]{20,})' -- . ':!.env.example'"
@@ -37,9 +42,10 @@ jobs:
         run: basedpyright
 
       - name: Dead code with Vulture
-        run: vulture
+        run: vulture src/crepe_mcp
 
-      - name: Run unit tests
+      - name: Run unit tests with coverage
         run: |
           export PYTHONPATH=src
-          python -m unittest discover -s tests -p "test_*.py" -v
+          venv/bin/python -m coverage run --source=crepe_mcp -m unittest discover -s tests -q
+          venv/bin/python -m coverage report --fail-under=46

@@ -212,7 +212,7 @@ Re-running `setup.py --install` is safe:
 
 ### Agent skill
 
-`skills/crepe/SKILL.md` is a short router for agents: which extension to enable for a task, the tool order, and the basic rules. `setup.py --install` copies it to `~/.agents/skills/crepe/` and adds `AGENTS.md` as `references/guide.md`. Goose lists installed skills in the agent prompt, so the agent learns about CREPE even while its extensions are still disabled.
+`.agents/skills/crepe/SKILL.md` is a short router for agents: which extension to enable for a task, the tool order, and the basic rules. `setup.py --install` copies it to `~/.agents/skills/crepe/` and adds `AGENTS.md` as `references/guide.md`. Goose lists installed skills in the agent prompt, so the agent learns about CREPE even while its extensions are still disabled.
 
 ### Sub-server enablement
 
@@ -276,6 +276,23 @@ that fails on a key-like literal.
 - **LuaLaTeX / TeX Live**: `texlive-full` or MacTeX (required for PDF compilation)
 - **LibreOffice**: (Optional / recommended) For rasterizing PPTX slides to PNG sequences
 - **Draw.io Desktop**: (Optional / recommended) For headless `.drawio` diagram export
+
+---
+
+## Development
+
+The servers run from `venv/bin/crepe-*`, so `./venv` is what the agents actually execute.
+
+```bash
+python3 -m venv venv
+venv/bin/pip install --upgrade . --group test        # package + coverage (pip >= 25.1)
+PYTHONPATH=src venv/bin/python -m unittest discover -s tests
+pre-commit install                                   # hooks mirror CI
+```
+
+- ruff, basedpyright, vulture and pre-commit run from the system install; CI pins the same versions as `.github/workflows/main.yml`.
+- The pre-commit hook `venv matches CI` reinstalls the package into `./venv` (non-editable) before the checks, so the servers always run the code that passed them. Coverage has a floor that only goes up.
+- `.agents/` holds everything meant for AI agents. Tracked: `.agents/skills/` (the `crepe` skill that `setup.py` installs) and `.agents/prompts/` (smoke-test prompts). Anything else in there (`PLAN.md`, `TODO.md`, local MCP configs) stays untracked on purpose.
 
 ---
 

@@ -38,7 +38,7 @@ AGENTS_MD_SRC = Path(__file__).resolve().parent / "AGENTS.md"
 GOOSE_CONFIG_DIR = Path.home() / ".config" / "goose"
 GOOSE_CONFIG_PATH = GOOSE_CONFIG_DIR / "config.yaml"
 AGENTS_MD_DST = GOOSE_CONFIG_DIR / "CREPE_AGENTS.md"  # legacy install location, only cleaned up
-SKILL_SRC = Path(__file__).resolve().parent / "skills" / "crepe"
+SKILL_SRC = Path(__file__).resolve().parent / ".agents" / "skills" / "crepe"
 SKILL_DST = Path.home() / ".agents" / "skills" / "crepe"
 
 AGY_CONFIG_DIR = Path.home() / ".gemini" / "config"
