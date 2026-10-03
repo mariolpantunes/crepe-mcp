@@ -28,11 +28,20 @@ repos:
       - id: check-yaml
       - id: check-toml
       - id: check-merge-conflict
+      - id: detect-private-key
       - id: check-added-large-files
         args: [--maxkb=512]
 
   - repo: local
     hooks:
+      # Keys live only in ~/.config/crepe-mcp/.env. Blocks a Tavily key or any *_API_KEY set to a
+      # 20+ character literal (the failure it prevents: a key pasted into a config, doc or test).
+      - id: no-api-keys
+        name: no API keys in the tree
+        entry: '(tvly-[A-Za-z0-9_-]{16,}|_API_KEY[^A-Za-z0-9_]{0,3}[:=][^A-Za-z0-9_-]{0,4}[A-Za-z0-9_-]{20,})'
+        language: pygrep
+        exclude: '^(uv\.lock|\.env\.example)$'
+
       - id: ruff
         name: ruff
         entry: ruff check .

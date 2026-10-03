@@ -202,36 +202,69 @@ def find_headless_browser() -> str | None:
     return None
 
 
-def read_keys_file() -> dict[str, str]:
-    """Read API keys from keys.md or .keys.md in the repo root or home directory."""
-    candidates = [
-        Path(SCRIPT_DIR) / "keys.md",
-        Path(SCRIPT_DIR) / ".keys.md",
-        Path.home() / "keys.md",
-        Path.home() / ".keys.md",
-    ]
-    keys: dict[str, str] = {}
-    for p in candidates:
-        if p.is_file():
-            try:
-                content = p.read_text(encoding="utf-8")
-                for line in content.splitlines():
-                    line = line.strip()
-                    if not line or line.startswith("#"):
-                        continue
-                    if ":" in line:
-                        k, v = line.split(":", 1)
-                        k = k.strip().lower()
-                        v = v.strip()
-                        if "s2" in k or "semantic" in k:
-                            keys.setdefault("ss_key", v)
-                        elif "tavily" in k:
-                            keys.setdefault("tavily_key", v)
-            except Exception:
-                pass
-            if keys:
-                break
-    return keys
+API_KEY_VARS = {
+    "tavily": ("CREPE_TAVILY_API_KEY", "Tavily API key for web_search"),
+    "semantic_scholar": ("CREPE_SEMANTIC_SCHOLAR_API_KEY", "Semantic Scholar API key (optional, avoids 429s)"),
+}
+
+
+def env_file_path() -> Path:
+    """The `.env` the servers read their API keys from (same default as crepe_mcp.config)."""
+    explicit = os.environ.get("CREPE_ENV_FILE", "").strip()
+    if explicit:
+        return Path(explicit).expanduser()
+    config_home = Path(os.environ.get("XDG_CONFIG_HOME", "") or Path.home() / ".config")
+    return config_home / "crepe-mcp" / ".env"
+
+
+def env_file_has(name: str) -> bool:
+    """True when the `.env` already defines a non-empty value for `name` (value never returned)."""
+    path = env_file_path()
+    if not path.is_file():
+        return False
+    for line in path.read_text(encoding="utf-8").splitlines():
+        key, sep, value = line.strip().removeprefix("export ").partition("=")
+        if sep and key.strip() == name and value.strip().strip("\"'"):
+            return True
+    return False
+
+
+def store_env_value(name: str, value: str) -> None:
+    """Set `name` in the `.env` (created 0600, folder 0700), keeping every other line as it is."""
+    path = env_file_path()
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    lines = path.read_text(encoding="utf-8").splitlines() if path.is_file() else []
+    entry = f"{name}={value}"
+    for i, line in enumerate(lines):
+        if line.strip().removeprefix("export ").partition("=")[0].strip() == name:
+            lines[i] = entry
+            break
+    else:
+        lines.append(entry)
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+    os.chmod(path, 0o600)
+
+
+def configure_api_keys(non_interactive: bool) -> None:
+    """Make sure each API key is in the `.env`. Keys never go into client configs or the shell profile.
+
+    A key already in the `.env` is kept. Otherwise it is taken from the process environment or, when
+    interactive, from a hidden prompt. Values are never printed.
+    """
+    for label, (name, description) in API_KEY_VARS.items():
+        if env_file_has(name):
+            print(f"🔑 {name} already set in {env_file_path()}")
+            continue
+        value = os.environ.get(name, "").strip()
+        if not value and not non_interactive:
+            value = interactive_prompt_secret(f"Enter {description} (or Enter to skip)")
+        if value:
+            store_env_value(name, value)
+            print(f"🔑 Stored {name} in {env_file_path()} (0600)")
+        else:
+            print(f"ℹ️  No {label} key: add {name}=... to {env_file_path()} to enable it.")
 
 
 def find_libreoffice() -> str | None:
@@ -477,7 +510,7 @@ def update_goose_config(envs: dict[str, str], enable_all: bool = False) -> bool:
     Only the CREPE blocks are edited; the rest of the file is left as it was. A
     timestamped backup is taken first. An extension the user already toggled keeps
     its `enabled` state on re-install, unless `enable_all` is given, and env values
-    already in the config (API keys, paths) are kept unless a new value is passed.
+    already in the config (paths) are kept unless a new value is passed.
 
     `enable_all` turns on every sub-server instead of honouring the per-server
     `enabled` flag in SUB_SERVERS. Required for hosts that cannot reach Goose's
@@ -501,7 +534,7 @@ def update_goose_config(envs: dict[str, str], enable_all: bool = False) -> bool:
         print(f"🗂️  Backed up Goose config to {backup_file(GOOSE_CONFIG_PATH)}")
 
     existing = config.get("extensions") or {}
-    # Re-installing must not drop settings (e.g. API keys) that this run was not given again.
+    # Re-installing must not drop settings (e.g. tool paths) that this run was not given again.
     for name in ["crepe"] + [sub["name"] for sub in SUB_SERVERS]:
         previous_envs = (existing.get(name) or {}).get("envs")
         if isinstance(previous_envs, dict) and previous_envs:
@@ -712,10 +745,6 @@ def run_install(args: argparse.Namespace) -> None:
     print(f"🚀 Installing CREPE MCP Server (`Option 1: Local Development` at {SCRIPT_DIR})")
     print(f"🎯 Selected Targets: {', '.join(targets)}\n")
 
-    file_keys = read_keys_file()
-    if file_keys:
-        print("📄 Auto-detected API keys from keys.md")
-
     # 1. Dependency checks
     for bin_name, hint in [
         ("pandoc", "Required for PDF/PPTX/DOCX compilation"),
@@ -736,15 +765,6 @@ def run_install(args: argparse.Namespace) -> None:
             )
         elif not args.non_interactive:
             browser_path = interactive_prompt("Enter browser executable path (or Enter to skip)")
-
-    # 3. Tavily Key
-    tavily_key = (
-        args.tavily_key
-        or os.environ.get("CREPE_TAVILY_API_KEY", os.environ.get("TAVILY_API_KEY", "")).strip()
-        or file_keys.get("tavily_key", "")
-    )
-    if not tavily_key and not args.non_interactive:
-        tavily_key = interactive_prompt_secret("Enter Tavily API key (or Enter to skip)")
 
     # 4. LibreOffice
     libreoffice_path = args.libreoffice_path or os.environ.get("CREPE_LIBREOFFICE_PATH", "").strip()
@@ -777,14 +797,8 @@ def run_install(args: argparse.Namespace) -> None:
         elif not args.non_interactive:
             drawio_path = interactive_prompt("Enter draw.io executable path (or Enter to skip)")
 
-    # 5b. Semantic Scholar
-    ss_key = (
-        args.ss_key
-        or os.environ.get("CREPE_SEMANTIC_SCHOLAR_API_KEY", "").strip()
-        or file_keys.get("ss_key", "")
-    )
-    if not ss_key and not args.non_interactive:
-        ss_key = interactive_prompt_secret("Enter Semantic Scholar API key (or Enter to skip)")
+    # 5b. API keys go to the .env the servers load, never into client configs
+    configure_api_keys(args.non_interactive)
 
     # 5c. Virtual environment preparation (native venv + pip)
     if not ensure_venv():
@@ -797,10 +811,6 @@ def run_install(args: argparse.Namespace) -> None:
 
     # 7. Build env dict
     envs = {}
-    if tavily_key:
-        envs["CREPE_TAVILY_API_KEY"] = tavily_key
-    if ss_key:
-        envs["CREPE_SEMANTIC_SCHOLAR_API_KEY"] = ss_key
     if browser_path:
         envs["CREPE_HEADLESS_BROWSER_PATH"] = browser_path
     if libreoffice_path:
@@ -895,11 +905,9 @@ def main() -> None:
         action="store_true",
         help="Do not prompt for missing inputs; accept defaults and flags.",
     )
-    parser.add_argument("--tavily-key", type=str, default="", help="Tavily API key.")
     parser.add_argument("--browser-path", type=str, default="", help="Path to Chromium/Chrome binary.")
     parser.add_argument("--libreoffice-path", type=str, default="", help="Path to LibreOffice executable.")
     parser.add_argument("--drawio-path", type=str, default="", help="Path to draw.io executable.")
-    parser.add_argument("--ss-key", type=str, default="", help="Semantic Scholar API key.")
 
     args = parser.parse_args()
     if args.uninstall:

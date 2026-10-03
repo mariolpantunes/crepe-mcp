@@ -374,7 +374,7 @@ Use `reference_doc` (a `.pptx` or `.docx` template) for PPTX/DOCX styling.
 
 | Variable | Purpose | Set by |
 |----------|---------|--------|
-| `CREPE_TAVILY_API_KEY` | Tavily web search | `setup.py --install` |
+| `CREPE_TAVILY_API_KEY` | Tavily web search | `.env` file (`~/.config/crepe-mcp/.env`) |
 | `CREPE_HEADLESS_BROWSER_PATH` | Chromium for `fetch_webpage` | `setup.py --install` |
 | `CREPE_LIBREOFFICE_PATH` | LibreOffice for PPTX→PNG | `setup.py --install` |
 | `CREPE_DRAWIO_PATH` | draw.io binary (optional override) | `setup.py --install` |

@@ -179,10 +179,8 @@ CREPE includes an automated installer script (`setup.py`) that detects your syst
 # enablement" below.
 ./setup.py --install --target goose --enable-all
 
-# Non-interactive installation with API keys and custom paths
+# Non-interactive installation with custom paths (API keys: see "API keys" below)
 ./setup.py --install -y \
-  --tavily-key "tvly-..." \
-  --ss-key "your-semantic-scholar-key" \
   --browser-path "/usr/bin/chromium"
 
 # Uninstall CREPE from all agent configs and shell profiles
@@ -198,8 +196,6 @@ CREPE includes an automated installer script (`setup.py`) that detects your syst
 | `--target` | `goose` `claude` `agy` `all` | `all` | Specify which agent configurations to update |
 | `--enable-all` | — | False | Goose only: register every sub-server as `enabled`. Use with ACP providers (`claude-acp`, `gemini-cli`, `cursor-agent`, `codex`) |
 | `-y`, `--non-interactive` | — | False | Accept all defaults and flags without interactive prompts |
-| `--tavily-key` | `KEY` | `""` | Tavily API Key for live web search |
-| `--ss-key` | `KEY` | `""` | Semantic Scholar API Key for literature searches |
 | `--browser-path` | `PATH` | auto | Absolute path to Chromium/Chrome binary for JS page rendering |
 | `--libreoffice-path` | `PATH` | auto | Path to LibreOffice binary for PPTX slide rasterization |
 | `--drawio-path` | `PATH` | auto | Path to draw.io desktop binary for diagram export |
@@ -210,7 +206,7 @@ Re-running `setup.py --install` is safe:
 
 - Only the CREPE blocks of `~/.config/goose/config.yaml` are edited. Comments, key order and every other setting stay as they were. If the file has an unexpected layout the script verifies the edit and falls back to a full rewrite.
 - A timestamped backup (`config.yaml.bak-YYYYMMDD-HHMMSS`, newest 5 kept) is written first, and the new file is swapped in atomically.
-- An extension you already enabled or disabled keeps that state, and existing `envs` values (API keys, paths) are kept unless you pass a new value.
+- An extension you already enabled or disabled keeps that state, and existing `envs` values (paths) are kept unless you pass a new value.
 - The `crepe` agent skill is copied to `~/.agents/skills/crepe/` (see below). It replaces the old `~/.config/goose/CREPE_AGENTS.md` copy, which is removed.
 - If a step fails the script prints which one and exits non-zero instead of reporting success.
 
@@ -256,11 +252,20 @@ loads every enabled schema up front.
 
 | Variable | Required For | Default / Auto-detection |
 |:---------|:-------------|:-------------------------|
-| `CREPE_TAVILY_API_KEY` | `web_search` tool | Prompts during setup or reads environment |
-| `CREPE_SEMANTIC_SCHOLAR_API_KEY` | `academic_search` rate limits | Optional (public tier used if unset) |
+| `CREPE_TAVILY_API_KEY` | `web_search` tool | Read from the `.env` file (see below) |
+| `CREPE_SEMANTIC_SCHOLAR_API_KEY` | `academic_search` rate limits | Optional, from the `.env` file (public tier used if unset) |
 | `CREPE_HEADLESS_BROWSER_PATH` | JavaScript-heavy `fetch_webpage` | Auto-detected from Chromium / Chrome / Brave |
 | `CREPE_LIBREOFFICE_PATH` | PPTX to PNG rendering | Auto-detected (`libreoffice` on PATH or Mac App) |
 | `CREPE_DRAWIO_PATH` | Headless diagram export | Auto-detected (`drawio` / `draw.io` on PATH) |
+
+### API keys
+
+API keys are never written to client configs (Goose, Claude, AGY) or to the shell profile. Each server loads
+them at start from the first existing file of: `$CREPE_ENV_FILE`, `~/.config/crepe-mcp/.env`, `./.env`.
+Variables already present in the process environment win over the file. Start from [`.env.example`](.env.example)
+and keep the file private (`chmod 600`; the servers warn otherwise). `./setup.py --install` stores a key there for you,
+taken from the environment or a hidden prompt, and never prints it. The repository carries a pre-commit and CI check
+that fails on a key-like literal.
 
 ---
 
