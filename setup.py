@@ -37,7 +37,7 @@ VENV_DIR = Path(SCRIPT_DIR) / "venv"
 GOOSE_CONFIG_DIR = Path.home() / ".config" / "goose"
 GOOSE_CONFIG_PATH = GOOSE_CONFIG_DIR / "config.yaml"
 AGENTS_MD_DST = GOOSE_CONFIG_DIR / "CREPE_AGENTS.md"  # legacy install location, only cleaned up
-SKILL_SRC = Path(__file__).resolve().parent / ".agents" / "skills" / "crepe"
+SKILL_SRC = Path(__file__).resolve().parent / "skills" / "crepe"
 SKILL_DST = Path.home() / ".agents" / "skills" / "crepe"
 
 AGY_CONFIG_DIR = Path.home() / ".gemini" / "config"
@@ -668,7 +668,7 @@ def remove_from_json_mcp_config(config_path: Path, client_name: str) -> None:
 
 
 def install_skill() -> bool:
-    """Install the crepe skill (.agents/skills/crepe) into ~/.agents/skills/crepe.
+    """Install the crepe skill (skills/crepe in this repo) into ~/.agents/skills/crepe.
 
     The copy is built next to the destination and swapped in, so a failure leaves
     any previous install untouched.

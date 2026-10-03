@@ -212,7 +212,7 @@ Re-running `setup.py --install` is safe:
 
 ### Agent skill
 
-`.agents/skills/crepe/SKILL.md` is the agent usage guide, in the open [Agent Skills](https://agentskills.io) format: a short router (which server for which task, tool order, hard rules) plus one reference file per domain with the Markdown syntax, parameters, lint output and troubleshooting that used to live in `AGENTS.md`. `setup.py --install` copies the skill folder (`SKILL.md`, `references/`, `scripts/`) to `~/.agents/skills/crepe/`. Goose lists installed skills in the agent prompt, so the agent learns about CREPE even while its extensions are still disabled.
+`skills/crepe/SKILL.md` is the agent usage guide, in the open [Agent Skills](https://agentskills.io) format: a short router (which server for which task, tool order, hard rules) plus one reference file per domain with the Markdown syntax, parameters, lint output and troubleshooting that used to live in `AGENTS.md`. `setup.py --install` copies the skill folder (`SKILL.md`, `references/`, `scripts/`) to `~/.agents/skills/crepe/`. Goose lists installed skills in the agent prompt, so the agent learns about CREPE even while its extensions are still disabled.
 
 ### Sub-server enablement
 
@@ -292,14 +292,14 @@ pre-commit install                                   # hooks mirror CI
 
 - ruff, basedpyright, vulture and pre-commit run from the system install; CI pins the same versions as `.github/workflows/main.yml`.
 - The pre-commit hook `venv matches CI` reinstalls the package into `./venv` (non-editable) before the checks, so the servers always run the code that passed them. Coverage has a floor that only goes up.
-- `.agents/` holds everything meant for AI agents. Tracked: `.agents/skills/` (the `crepe` skill that `setup.py` installs) and `.agents/prompts/` (smoke-test prompts). Anything else in there (`PLAN.md`, `TODO.md`, local MCP configs) stays untracked on purpose.
+- `skills/crepe/` is the agent skill (Agent Skills format); `./setup.py --install` copies it to `~/.agents/skills/crepe/` and `--uninstall` removes it. `tests/agent_prompts/` holds smoke-test prompts for it. The repo's `.agents/` folder is local agent state (plans, local MCP configs) and is git-ignored.
 
 ---
 
 ## Documentation & References
 
 - **[Online API Reference](https://mariolpantunes.github.io/crepe-mcp/)**: Complete auto-generated documentation built via `pdoc`.
-- **[Agent skill](.agents/skills/crepe/SKILL.md)**: Syntax rules, tool order and troubleshooting for AI agents using CREPE tools.
+- **[Agent skill](skills/crepe/SKILL.md)**: Syntax rules, tool order and troubleshooting for AI agents using CREPE tools.
 - **[Citation Metadata (CITATION.cff)](CITATION.cff)**: Citation instructions for academic research using CREPE.
 
 ---
