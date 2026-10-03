@@ -1,0 +1,107 @@
+{
+  "heuristics": {
+    "same_size": {
+      "value": 0.05,
+      "unit": "em",
+      "description": "Font sizes closer than this are the same size (PDF producers round sizes)."
+    },
+    "same_row": {
+      "value": 0.5,
+      "unit": "line heights",
+      "description": "Lines whose vertical centres are closer than this share a row."
+    },
+    "column_overlap": {
+      "value": 0.4,
+      "unit": "em",
+      "description": "A line may cross the page middle by this much and still belong to one column."
+    },
+    "running_page_distance": {
+      "value": 2,
+      "unit": "pages",
+      "description": "Running heads recur on consecutive (1) or alternating odd/even (2) pages."
+    },
+    "running_min_pages": {
+      "value": 3,
+      "unit": "pages",
+      "description": "Fewest pages, each at most running_page_distance from the next, that must repeat a running head or footer; two pages can repeat a figure layout by chance."
+    },
+    "running_shift": {
+      "value": 1.0,
+      "unit": "line heights",
+      "description": "Largest vertical shift of a running head or footer between pages (first pages often move it); proof line numbers step by more than a line height, so they never chain."
+    },
+    "line_number_sequence": {
+      "value": 3,
+      "unit": "lines",
+      "description": "Shortest increasing run of digits in the side margin taken as proof line numbers."
+    },
+    "numbering_run": {
+      "value": 3,
+      "unit": "headings",
+      "description": "Shortest run of consecutive section numbers accepted although it does not start at the first number (its first heading was not recognised)."
+    },
+    "indent": {
+      "value": 0.5,
+      "unit": "em",
+      "description": "Smallest first-line indent that starts a paragraph."
+    },
+    "paragraph_space": {
+      "value": 0.5,
+      "unit": "em",
+      "description": "Vertical space beyond the document's usual line gap that separates paragraphs."
+    },
+    "caption_region": {
+      "value": 3.0,
+      "unit": "line heights",
+      "description": "Largest distance between a caption and its figure or table."
+    },
+    "figure_min_height": {
+      "value": 2.0,
+      "unit": "line heights",
+      "description": "Smallest vector-drawing cluster accepted as a figure (height)."
+    },
+    "figure_min_width": {
+      "value": 4.0,
+      "unit": "em",
+      "description": "Smallest vector-drawing cluster accepted as a figure (width)."
+    },
+    "rule_max_thickness": {
+      "value": 0.15,
+      "unit": "em",
+      "description": "A horizontal drawing thinner than this is a rule."
+    },
+    "rule_min_length": {
+      "value": 2.0,
+      "unit": "em",
+      "description": "Shortest horizontal drawing treated as a rule."
+    },
+    "rule_alignment": {
+      "value": 1.0,
+      "unit": "em",
+      "description": "Rules whose ends differ by less than this bound the same table (booktabs top, middle and bottom rules); rule pieces on one row closer than this form one rule."
+    }
+    },
+  "images": {
+    "enabled": {
+      "value": false,
+      "description": "Attach a cropped image of a numbered item when get_asset asks for one. Off while Goose drops images for custom providers (aaif-goose/goose#11998); turn on once the agent receives them."
+    },
+    "budget": {
+      "value": 4,
+      "unit": "images per paper",
+      "description": "Most images attached during one review of a paper; a new get_paper_overview restores the budget."
+    },
+    "max_side": {
+      "value": 1280,
+      "unit": "pixels",
+      "description": "Longest side of an attached image."
+    }
+  },
+  "replies": {
+    "asset_budget": {
+      "value": 6,
+      "unit": "numbered items per paper",
+      "description": "Most items get_asset returns in full during one review of a paper; asking again for an item already returned, or for more items, gets a one-line reply. A new get_paper_overview restores the budget."
+    }
+  }
+}
