@@ -95,7 +95,7 @@ repos:
         entry: >-
           bash -c 'PYTHONPATH=src venv/bin/python -m coverage run --source=crepe_mcp
           -m unittest discover -s tests -q && venv/bin/python -m coverage report
-          --fail-under=72'
+          --fail-under=73'
         language: system
         files: '(\.py$|^pyproject\.toml$)'
         pass_filenames: false

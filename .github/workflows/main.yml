@@ -48,4 +48,4 @@ jobs:
         run: |
           export PYTHONPATH=src
           venv/bin/python -m coverage run --source=crepe_mcp -m unittest discover -s tests -q
-          venv/bin/python -m coverage report --fail-under=72
+          venv/bin/python -m coverage report --fail-under=73

@@ -160,7 +160,7 @@ Inspection, deep linting, and export for `.drawio` diagram files.
 - **Export**: `export_drawio` (headless rasterization to transparent high-DPI PNG, SVG, or PDF).
 
 ### 6. Reader (`crepe-reader` — 8 tools)
-Reads existing documents without any model, so an agent can work on a long file in small pieces. A file is read once into a store of pages, sections, paragraphs and numbered items (cached under the system temp folder, `CREPE_SCRATCH_BASE`); each tool returns a piece of it.
+Reads existing documents without any model, so an agent can work on a long file in small pieces. A file is read once into a store of pages, sections, paragraphs and numbered items (cached under the system temp folder, `CREPE_SCRATCH_BASE`); each tool returns a piece of it. The first read of a long PDF takes seconds; pages with tables are analysed in worker processes, and later calls are instant.
 - **Orientation**: `open_document` (title, parts of a PDF bundle, outline with pages, counts of figures, tables, equations).
 - **Reading**: `read_pages` (about 12,000 characters per call, with a continuation cursor), `read_section` (by outline heading), `search_document`.
 - **Numbered items**: `list_assets` and `get_asset` return figures, tables (as Markdown), equations (text and TeX), algorithms, listings and references, with the sentences that cite them.

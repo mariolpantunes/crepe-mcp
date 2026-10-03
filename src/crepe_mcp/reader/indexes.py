@@ -35,6 +35,7 @@ Tolerances are relative to the document's measured body size and line height (se
 from __future__ import annotations
 
 import re
+from bisect import bisect_left, bisect_right
 from collections import Counter
 from dataclasses import dataclass, field
 
@@ -304,6 +305,7 @@ def _page_cells(page: Page, metrics: Metrics, starts: dict[int, float]) -> set[i
     edges = _page_edges(page, metrics)
     crowded = _crowded(body, row, metrics.body_size)
     cells: set[int] = set()
+    rows = _RowIndex(body)
     by_column: dict[int, list[Line]] = {}
     for line in body:
         by_column.setdefault(line.column, []).append(line)
@@ -311,7 +313,7 @@ def _page_cells(page: Page, metrics: Metrics, starts: dict[int, float]) -> set[i
             continue
         low, high = starts.get(line.column, 0.0) - margin, edges.get(line.column, page.width) + margin
         if any(low <= mate.x0 and mate.x1 <= high and re.search(r"[^\W\d_]", mate.text)
-               for mate in _row_mates(line, body, row)):
+               for mate in rows.mates(line, row)):
             cells.add(line.id)
     for column_lines in by_column.values():
         ordered = sorted(column_lines, key=lambda line: (line.y0, line.x0))
@@ -397,9 +399,32 @@ def _candidates(pages: list[Page], metrics: Metrics) -> list[_Candidate]:
     return candidates
 
 
-def _row_mates(line: Line, body: list[Line], tolerance: float) -> list[Line]:
-    return [other for other in body
-            if other.id != line.id and other.column == line.column and abs(_centre(other) - _centre(line)) <= tolerance]
+class _RowIndex:
+    """Lines of one page by column and vertical centre, so that the lines sharing a row with a line are found by
+    bisection instead of a scan of the whole page."""
+
+    def __init__(self, body: list[Line]) -> None:
+        columns: dict[int, list[tuple[float, Line]]] = {}
+        for line in body:
+            columns.setdefault(line.column, []).append((_centre(line), line))
+        self._centres: dict[int, list[float]] = {}
+        self._lines: dict[int, list[Line]] = {}
+        for column, entries in columns.items():
+            entries.sort(key=lambda entry: entry[0])
+            self._centres[column] = [centre for centre, _ in entries]
+            self._lines[column] = [line for _, line in entries]
+
+    def mates(self, line: Line, tolerance: float) -> list[Line]:
+        """Other lines of the column whose centre is within tolerance of this line's, by vertical centre."""
+        centres = self._centres.get(line.column)
+        if not centres:
+            return []
+        centre = _centre(line)
+        slack = 1e-6  # the window is widened and the exact test below decides, so float rounding cannot matter
+        low = bisect_left(centres, centre - tolerance - slack)
+        high = bisect_right(centres, centre + tolerance + slack)
+        return [other for other in self._lines[line.column][low:high]
+                if other.id != line.id and abs(_centre(other) - centre) <= tolerance]
 
 
 def _headings(candidates: list[_Candidate]) -> list[_Candidate]:

@@ -19,6 +19,7 @@ import shutil
 import subprocess
 import tempfile
 import xml.etree.ElementTree as ET
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -203,6 +204,22 @@ def _check_markdown(
     return issues
 
 
+LINT_WORKERS = 8  # concurrent pandoc parses; each one is a separate process, the wait is what costs
+LINT_PARALLEL_MIN = 3  # fewer pieces are checked one by one
+
+
+def _check_many(jobs: list[tuple[str, dict[str, int | None]]], workdir: str | None) -> list[list[Issue]]:
+    """_check_markdown over many pieces, concurrently, with the results in the order of the jobs."""
+
+    def run(job: tuple[str, dict[str, int | None]]) -> list[Issue]:
+        return _check_markdown(job[0], workdir=workdir, **job[1])
+
+    if len(jobs) < LINT_PARALLEL_MIN:
+        return [run(job) for job in jobs]
+    with ThreadPoolExecutor(min(LINT_WORKERS, len(jobs))) as pool:
+        return list(pool.map(run, jobs))
+
+
 def _pandoc_dry_run(
     markdown: str,
     lines: list[str],
@@ -302,17 +319,15 @@ def lint_presentation_content(
     else:
         target_range = range(len(slides))
 
-    for i in target_range:
-        title, content = slides[i]
-        if not title.strip():
+    checked = _check_many([(slides[i][1], {"slide_index": i}) for i in target_range], workdir)
+    for i, found in zip(target_range, checked, strict=True):
+        if not slides[i][0].strip():
             issues.append(Issue(
                 type="missing_title",
                 message="Slide has no title.",
                 slide_index=i,
             ))
-        issues.extend(
-            _check_markdown(content, workdir=workdir, slide_index=i)
-        )
+        issues.extend(found)
 
     return LintReport(valid=len(issues) == 0, issues=issues)
 
@@ -352,6 +367,13 @@ def lint_document_content(
     else:
         target_range = range(len(chapters))
 
+    jobs: list[tuple[str, dict[str, int | None]]] = []
+    for ci in target_range:
+        _, ch_intro, sections = chapters[ci]
+        if ch_intro:
+            jobs.append((ch_intro, {"chapter_index": ci}))
+        jobs.extend((content, {"chapter_index": ci, "section_index": si}) for si, (_, content) in enumerate(sections))
+    checked = iter(_check_many(jobs, workdir))
     for ci in target_range:
         ch_title, ch_intro, sections = chapters[ci]
         if not ch_title.strip():
@@ -361,10 +383,8 @@ def lint_document_content(
                 chapter_index=ci,
             ))
         if ch_intro:
-            issues.extend(
-                _check_markdown(ch_intro, workdir=workdir, chapter_index=ci)
-            )
-        for si, (sec_title, sec_content) in enumerate(sections):
+            issues.extend(next(checked))
+        for si, (sec_title, _) in enumerate(sections):
             if not sec_title.strip():
                 issues.append(Issue(
                     type="missing_title",
@@ -372,14 +392,7 @@ def lint_document_content(
                     chapter_index=ci,
                     section_index=si,
                 ))
-            issues.extend(
-                _check_markdown(
-                    sec_content,
-                    workdir=workdir,
-                    chapter_index=ci,
-                    section_index=si,
-                )
-            )
+            issues.extend(next(checked))
 
     return LintReport(valid=len(issues) == 0, issues=issues)
 

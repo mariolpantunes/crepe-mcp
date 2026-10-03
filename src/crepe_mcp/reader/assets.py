@@ -21,8 +21,13 @@ document's body size and line height (see ``heuristics``):
 
 from __future__ import annotations
 
+import os
+import pickle
 import re
 import statistics
+import subprocess
+import sys
+import tempfile
 from bisect import bisect_left, bisect_right
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -177,7 +182,8 @@ def _text_blocks(pages: list[Page]) -> dict[tuple[float, float], tuple[float, fl
 
 
 def _geometry(
-    pdf_page: Any, page: Page, with_tables: bool, metrics: Metrics, text_block: tuple[float, float]
+    pdf_page: Any, page: Page, with_tables: bool, metrics: Metrics, text_block: tuple[float, float],
+    drawings: list[dict[str, Any]] | None = None,
 ) -> _Geometry:
     em, line_height = metrics.body_size, metrics.line_height
     top, bottom = text_block[0] - SAME_ROW * line_height, text_block[1] + SAME_ROW * line_height
@@ -188,14 +194,16 @@ def _geometry(
         return rect[3] <= top or rect[1] >= bottom
 
     geometry = _Geometry()
-    data: Any = pdf_page.get_text("dict")
-    for block in data.get("blocks", []):
-        if block.get("type") == 1:
-            rect = _rect(block["bbox"])
+    # image blocks are all that is needed here: the "blocks" form lists them with their boxes and, unlike "dict",
+    # does not copy the image data (same boxes, several times faster)
+    for block in pdf_page.get_text("blocks", flags=fitz.TEXTFLAGS_DICT):
+        if block[6] == 1:
+            rect = _rect(block[:4])
             if not beyond_text(rect):
                 geometry.images.append(rect)
     pieces: list[Rect] = []
-    for drawing in pdf_page.get_drawings():
+    paths: list[dict[str, Any]] = pdf_page.get_drawings() if drawings is None else drawings
+    for drawing in paths:
         rect = _rect(drawing["rect"])
         width, height = rect[2] - rect[0], rect[3] - rect[1]
         if beyond_text(rect):
@@ -205,7 +213,7 @@ def _geometry(
         elif height > RULE_MAX_THICKNESS * em and width > RULE_MAX_THICKNESS * em:
             pieces.append(rect)
     if with_tables:
-        geometry.tables = [_rect(table.bbox) for table in pdf_page.find_tables().tables]
+        geometry.tables = [_rect(table.bbox) for table in pdf_page.find_tables(paths=paths).tables]
     geometry.shapes = [
         _with_labels(cluster, page, metrics)
         for cluster in _cluster(pieces, SAME_ROW * line_height)
@@ -611,7 +619,9 @@ def _repair_rows(grid: list[list[str]]) -> list[list[str]]:
     return [[r[i] for i in keep] for r in out]
 
 
-def _table_text(pdf_page: Any, region: Rect, page: Page, metrics: Metrics) -> tuple[str, str, str]:
+def _table_text(
+    pdf_page: Any, region: Rect, page: Page, metrics: Metrics, page_drawings: list[dict[str, Any]] | None = None
+) -> tuple[str, str, str]:
     """(content, format, strategy) of a table region as plain Markdown. Cells come from phrases of the region's
     words (spacing measured on the page); a table drawn with vertical rules or cell boxes keeps PyMuPDF's ruling-line
     cells when its rules separate at least as many columns as the phrases do."""
@@ -621,13 +631,14 @@ def _table_text(pdf_page: Any, region: Rect, page: Page, metrics: Metrics) -> tu
     clip = fitz.Rect(region[0] - align, region[1] - row, region[2] + align, region[3] + row)
     words = pdf_page.get_text("words")
     inside_region = (clip.x0, clip.y0, clip.x1, clip.y1)
-    drawings = [d["rect"] for d in pdf_page.get_drawings() if _near(_rect(d["rect"]), inside_region, 0)]
+    all_paths: list[dict[str, Any]] = pdf_page.get_drawings() if page_drawings is None else page_drawings
+    drawings = [d["rect"] for d in all_paths if _near(_rect(d["rect"]), inside_region, 0)]
     vertical = [r for r in drawings if r.width <= thickness and r.height >= row * 2]
     boxes = [r for r in drawings if r.width > thickness and r.height > thickness]
     lines_grid: list[list[str]] = []
     if len(vertical) >= 3 or len(boxes) >= 3:
         best: tuple[int, list[list[str]]] | None = None
-        for table in pdf_page.find_tables(clip=clip, strategy="lines").tables:
+        for table in pdf_page.find_tables(clip=clip, strategy="lines", paths=all_paths).tables:
             grid = _table_grid(table, [w for w in words if _centre_inside((w[0], w[1], w[2], w[3]), inside_region)],
                                thickness, row)
             filled = sum(1 for line in grid for cell in line if cell)
@@ -812,6 +823,48 @@ def _expand(spec: str, highest: int) -> list[str]:
     return [str(n) for n in numbers]
 
 
+PARALLEL_MIN_TABLE_PAGES = 3  # fewer table pages are faster in one process than the workers' start-up
+MAX_GEOMETRY_WORKERS = 8
+WORKER_TIMEOUT = 600  # seconds a worker may take before its pages are computed here instead
+
+
+def _geometries_in_workers(
+    pdf_path: Path, numbers: list[int], pages: dict[int, Page], metrics: Metrics,
+    blocks: dict[int, tuple[float, float]],
+) -> dict[int, _Geometry]:
+    """Geometry (with tables) of the given pages computed by worker processes; pages a worker did not deliver are
+    simply missing from the result. Each page is independent, so the result equals computing them one by one."""
+    workers = min(len(numbers), os.cpu_count() or 1, MAX_GEOMETRY_WORKERS)
+    if workers < 2:
+        return {}
+    env = {**os.environ, "PYTHONPATH": os.pathsep.join(path for path in sys.path if path)}
+    found: dict[int, _Geometry] = {}
+    with tempfile.TemporaryDirectory(prefix="crepe-geometry-") as tmp:
+        running: list[tuple[subprocess.Popen[bytes], Path]] = []
+        try:
+            for index in range(workers):
+                share = numbers[index::workers]
+                tasks, out = Path(tmp) / f"tasks{index}.pkl", Path(tmp) / f"out{index}.pkl"
+                tasks.write_bytes(pickle.dumps([(n, pages[n], metrics, blocks[n]) for n in share]))
+                cmd = [sys.executable, "-m", "crepe_mcp.reader.geometry_worker", str(pdf_path), str(tasks), str(out)]
+                running.append((subprocess.Popen(cmd, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                                 stderr=subprocess.DEVNULL), out))
+            for process, out in running:
+                try:
+                    if process.wait(timeout=WORKER_TIMEOUT) == 0 and out.is_file():
+                        found.update(pickle.loads(out.read_bytes()))
+                except subprocess.TimeoutExpired:
+                    process.kill()
+        except OSError:
+            pass
+        finally:
+            for process, _ in running:
+                if process.poll() is None:
+                    process.kill()
+                process.wait()
+    return found
+
+
 def build_assets(
     pdf_path: Path,
     pages: list[Page],
@@ -845,18 +898,32 @@ def build_assets(
     text_blocks = _text_blocks(pages)
     last_page = max(page.number for page in pages)
     doc = fitz.open(str(pdf_path))
+    drawings_cache: dict[int, list[dict[str, Any]]] = {}
+
+    def drawings_of(number: int) -> list[dict[str, Any]]:
+        """The vector graphics of a page, read once and shared by the geometry and the table text."""
+        if number not in drawings_cache:
+            drawings_cache[number] = doc[number - 1].get_drawings()
+        return drawings_cache[number]
 
     def geometry_of(number: int, with_tables: bool = True) -> _Geometry:
         found = geometry.get(number)
         if found is None:
             page = page_by_number[number]
             text_block = text_blocks.get((page.width, page.height), (0.0, page.height))
-            found = _geometry(doc[number - 1], page, with_tables, metrics, text_block)
+            found = _geometry(doc[number - 1], page, with_tables, metrics, text_block, drawings_of(number))
             geometry[number] = found
         return found
 
+    # find_tables dominates the build and every page is independent: the table pages go to worker processes
+    # (the parent meanwhile does the cheap pages); the results are those of computing them one after another.
+    if len(table_pages) >= PARALLEL_MIN_TABLE_PAGES:
+        table_blocks = {n: text_blocks.get((page_by_number[n].width, page_by_number[n].height),
+                                           (0.0, page_by_number[n].height)) for n in table_pages}
+        geometry.update(_geometries_in_workers(pdf_path, sorted(table_pages), page_by_number, metrics, table_blocks))
     for number in geometry_pages:
-        geometry_of(number, number in table_pages)
+        if number not in geometry:
+            geometry_of(number, number in table_pages)
 
     def text_block(number: int) -> tuple[float, float]:
         page = page_by_number[number]
@@ -897,7 +964,8 @@ def build_assets(
             run = ([(first.page, bbox)] if method == "caption+table" else _table_run(
                 first.page, bbox, lambda number: geometry_of(number).joined, caption_lines, text_block,
                 last_page, RULE_ALIGNMENT * em))
-            texts = [_table_text(doc[number - 1], part, page_by_number[number], metrics) for number, part in run]
+            texts = [_table_text(doc[number - 1], part, page_by_number[number], metrics, drawings_of(number))
+                     for number, part in run]
             content, content_format = _merge_tables([(text, fmt) for text, fmt, _ in texts])
             ends = run[-1][0]
             confidence = "high" if texts[0][2] == "lines" and method == "caption+table" else "medium"

@@ -103,34 +103,61 @@ render_via_libreoffice = _render_office_to_pngs
 find_libreoffice = _find_libreoffice
 
 
+RENDER_PARALLEL_MIN_PAGES = 4  # fewer pages are faster in one process than the workers' start-up
+MAX_RENDER_WORKERS = 8
+RENDER_WORKER_TIMEOUT = 600
+
+
+def _render_in_workers(pdf_path: str, output_dir: str, dpi: int, count: int) -> bool:
+    """Render pages 1..count with worker processes (one share of the pages each). True when every page was written;
+    on any failure the caller renders the pages itself."""
+    workers = min(count, os.cpu_count() or 1, MAX_RENDER_WORKERS)
+    if count < RENDER_PARALLEL_MIN_PAGES or workers < 2:
+        return False
+    env = {**os.environ, "PYTHONPATH": os.pathsep.join(path for path in sys.path if path)}
+    running: list[subprocess.Popen[bytes]] = []
+    ok = True
+    try:
+        for index in range(workers):
+            pages = [str(number) for number in range(1 + index, count + 1, workers)]
+            cmd = [sys.executable, "-m", "crepe_mcp.render_worker", pdf_path, output_dir, str(dpi), *pages]
+            running.append(subprocess.Popen(cmd, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                            stderr=subprocess.DEVNULL))
+        for process in running:
+            try:
+                ok = process.wait(timeout=RENDER_WORKER_TIMEOUT) == 0 and ok
+            except subprocess.TimeoutExpired:
+                ok = False
+    except OSError:
+        ok = False
+    finally:
+        for process in running:
+            if process.poll() is None:
+                process.kill()
+            process.wait()
+    return ok
+
+
 def render_pdf_to_pngs(
     pdf_path: str,
     output_dir: str,
     dpi: int = 150,
 ) -> list[str]:
-    """Render every page of a PDF to a numbered PNG sequence via pymupdf."""
+    """Render every page of a PDF to a numbered PNG sequence via pymupdf (long PDFs in worker processes)."""
     try:
-        import fitz  # pymupdf
+        import pymupdf
     except ImportError as exc:
         raise ImportError("pymupdf is not installed. Run: pip install pymupdf") from exc
 
     Path(output_dir).mkdir(parents=True, exist_ok=True)
-    zoom = dpi / 72.0       # pymupdf base resolution is 72 dpi
-    mat = fitz.Matrix(zoom, zoom)
+    with pymupdf.open(pdf_path) as doc:
+        count = len(doc)
+    expected = [os.path.join(output_dir, f"slide_{number:03d}.png") for number in range(1, count + 1)]
+    if _render_in_workers(pdf_path, output_dir, dpi, count) and all(os.path.isfile(path) for path in expected):
+        return expected
+    from crepe_mcp.render_worker import render_pages
 
-    png_files: list[str] = []
-    doc = fitz.open(pdf_path)
-    try:
-        for i in range(len(doc)):
-            page = doc[i]
-            pix = page.get_pixmap(matrix=mat)
-            out_path = os.path.join(output_dir, f"slide_{i + 1:03d}.png")
-            pix.save(out_path)
-            png_files.append(out_path)
-    finally:
-        doc.close()
-
-    return png_files
+    return render_pages(pdf_path, output_dir, dpi, list(range(1, count + 1)))
 
 
 def render_pptx_to_pngs(

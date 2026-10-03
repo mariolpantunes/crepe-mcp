@@ -169,7 +169,7 @@ def _read_page(page: Any, number: int) -> Page:
         label=str(page.get_label() or ""),
         source=source,
         images=images,
-        drawings=len(page.get_drawings()),
+        drawings=len(page.get_cdrawings()),
         markup_annots=sum(1 for _ in page.annots(types=MARKUP_ANNOT_TYPES) or []),
         lines=lines,
     )
