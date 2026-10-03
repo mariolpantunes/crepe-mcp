@@ -212,7 +212,7 @@ Re-running `setup.py --install` is safe:
 
 ### Agent skill
 
-`.agents/skills/crepe/SKILL.md` is a short router for agents: which extension to enable for a task, the tool order, and the basic rules. `setup.py --install` copies it to `~/.agents/skills/crepe/` and adds `AGENTS.md` as `references/guide.md`. Goose lists installed skills in the agent prompt, so the agent learns about CREPE even while its extensions are still disabled.
+`.agents/skills/crepe/SKILL.md` is the agent usage guide, in the open [Agent Skills](https://agentskills.io) format: a short router (which server for which task, tool order, hard rules) plus one reference file per domain with the Markdown syntax, parameters, lint output and troubleshooting that used to live in `AGENTS.md`. `setup.py --install` copies the skill folder (`SKILL.md`, `references/`, `scripts/`) to `~/.agents/skills/crepe/`. Goose lists installed skills in the agent prompt, so the agent learns about CREPE even while its extensions are still disabled.
 
 ### Sub-server enablement
 
@@ -299,7 +299,7 @@ pre-commit install                                   # hooks mirror CI
 ## Documentation & References
 
 - **[Online API Reference](https://mariolpantunes.github.io/crepe-mcp/)**: Complete auto-generated documentation built via `pdoc`.
-- **[Agent Usage Guide (AGENTS.md)](AGENTS.md)**: Syntax rules, Beamer theme guidelines, and prompt constraints for AI agents using CREPE tools.
+- **[Agent skill](.agents/skills/crepe/SKILL.md)**: Syntax rules, tool order and troubleshooting for AI agents using CREPE tools.
 - **[Citation Metadata (CITATION.cff)](CITATION.cff)**: Citation instructions for academic research using CREPE.
 
 ---

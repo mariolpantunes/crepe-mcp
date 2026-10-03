@@ -1,4 +1,4 @@
-Read AGENTS.md in the current directory first, then use the CREPE MCP server tools to:
+Read the crepe skill (SKILL.md and the reference it points to for the task) first, then use the CREPE MCP server tools to:
 
 1. Create a 4-slide presentation titled "Renewable Energy Overview"
 2. Add these slides:

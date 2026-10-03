@@ -32,7 +32,6 @@ except ImportError:
 
 SCRIPT_DIR = str(Path(__file__).resolve().parent)
 VENV_DIR = Path(SCRIPT_DIR) / "venv"
-AGENTS_MD_SRC = Path(__file__).resolve().parent / "AGENTS.md"
 
 # Target Config Paths
 GOOSE_CONFIG_DIR = Path.home() / ".config" / "goose"
@@ -70,7 +69,7 @@ PROFILE_BLOCK_END = "# === End CREPE MCP ==="
 # an ACP provider the agent is the external tool (e.g. Claude Code), and Goose
 # forwards MCP extensions to it but not its own `type: platform` ones — so
 # manage_extensions is unreachable and a disabled sub-server can never be turned
-# on. Install with --enable-all there; see the ACP section in AGENTS.md.
+# on. Install with --enable-all there; see references/troubleshooting.md in the crepe skill.
 SUB_SERVERS = [
     {
         "name": "crepe-presentations",
@@ -514,7 +513,7 @@ def update_goose_config(envs: dict[str, str], enable_all: bool = False) -> bool:
 
     `enable_all` turns on every sub-server instead of honouring the per-server
     `enabled` flag in SUB_SERVERS. Required for hosts that cannot reach Goose's
-    Extension Manager — see the ACP note in AGENTS.md.
+    Extension Manager — see references/troubleshooting.md in the crepe skill.
     """
     yaml = load_yaml()
     if yaml is None:
@@ -669,7 +668,7 @@ def remove_from_json_mcp_config(config_path: Path, client_name: str) -> None:
 
 
 def install_skill() -> bool:
-    """Install the crepe skill into ~/.agents/skills/crepe, with AGENTS.md as references/guide.md.
+    """Install the crepe skill (.agents/skills/crepe) into ~/.agents/skills/crepe.
 
     The copy is built next to the destination and swapped in, so a failure leaves
     any previous install untouched.
@@ -682,9 +681,6 @@ def install_skill() -> bool:
         SKILL_DST.parent.mkdir(parents=True, exist_ok=True)
         shutil.rmtree(tmp, ignore_errors=True)
         shutil.copytree(SKILL_SRC, tmp, ignore=shutil.ignore_patterns("__pycache__"))
-        if AGENTS_MD_SRC.is_file():
-            (tmp / "references").mkdir(exist_ok=True)
-            shutil.copy2(AGENTS_MD_SRC, tmp / "references" / "guide.md")
         shutil.rmtree(SKILL_DST, ignore_errors=True)
         os.replace(tmp, SKILL_DST)
     except OSError as e:
@@ -896,7 +892,7 @@ def main() -> None:
         help=(
             "Goose only: register every sub-server as enabled instead of leaving the "
             "on-demand ones off. Use with hosts that cannot reach Goose's Extension "
-            "Manager (e.g. the claude-acp / ACP providers) — see AGENTS.md."
+            "Manager (e.g. the claude-acp / ACP providers) — see the crepe skill's troubleshooting reference."
         ),
     )
     parser.add_argument(

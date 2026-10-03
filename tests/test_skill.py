@@ -41,18 +41,107 @@ def load_setup():
     return mod
 
 
+def frontmatter(text: str) -> tuple[dict, str]:
+    """Parse the flat `key: value` frontmatter (one nested level allowed under `metadata:`)."""
+    m = re.match(r"^---\n(.*?)\n---\n", text, re.S)
+    assert m, "SKILL.md needs frontmatter"
+    fields: dict = {}
+    parent = None
+    for line in m.group(1).splitlines():
+        key, _, value = line.strip().partition(":")
+        if line.startswith("  ") and parent:
+            fields[parent][key] = value.strip().strip('"')
+        elif value.strip():
+            fields[key] = value.strip()
+            parent = None
+        else:
+            fields[key] = {}
+            parent = key
+    return fields, text[m.end():]
+
+
+def tool_names() -> set[str]:
+    import asyncio
+    import importlib
+
+    names: set[str] = set()
+    for server in ("presentations", "documents", "research", "spreadsheets", "diagrams"):
+        mod = importlib.import_module(f"crepe_mcp.server_{server}")
+        names |= {t.name for t in asyncio.run(mod.mcp.list_tools())}
+    return names
+
+
 class SkillTests(unittest.TestCase):
-    def test_frontmatter(self):
-        m = re.match(r"^---\nname: (.+)\ndescription: (.+)\n---\n", SKILL.read_text())
-        self.assertIsNotNone(m)
-        self.assertEqual(m.group(1), "crepe")
-        self.assertLess(len(m.group(2)), 300)
+    """The crepe skill follows the Agent Skills format (agentskills.io) and does not drift from the tools."""
+
+    SKILL_DIR = SKILL.parent
+    ALLOWED = {"name", "description", "license", "compatibility", "metadata", "allowed-tools"}
+
+    def test_frontmatter_follows_the_spec(self):
+        fields, body = frontmatter(SKILL.read_text())
+        self.assertLessEqual(set(fields), self.ALLOWED)
+        self.assertEqual(fields["name"], self.SKILL_DIR.name)
+        self.assertRegex(fields["name"], r"^[a-z0-9]+(-[a-z0-9]+)*$")
+        self.assertLessEqual(len(fields["name"]), 64)
+        self.assertTrue(0 < len(fields["description"]) < 300)
+        self.assertLessEqual(len(fields.get("compatibility", "")), 500)
+        self.assertLess(len(body.splitlines()), 80)
 
     def test_lists_every_sub_server(self):
         setup = load_setup()
         text = SKILL.read_text()
         for sub in setup.SUB_SERVERS:
             self.assertIn(f"`{sub['name']}`", text)
+
+    def test_relative_links_resolve(self):
+        text = SKILL.read_text()
+        links = set(re.findall(r"`((?:references|scripts)/[\w./-]+)`", text))
+        self.assertTrue(links)
+        for link in links:
+            self.assertTrue((self.SKILL_DIR / link).is_file(), link)
+
+    def test_every_reference_is_linked_and_starts_with_read_when(self):
+        text = SKILL.read_text()
+        for ref in sorted((self.SKILL_DIR / "references").glob("*.md")):
+            self.assertIn(f"references/{ref.name}", text, f"{ref.name} not linked from SKILL.md")
+            self.assertTrue(ref.read_text().startswith("Read when:"), ref.name)
+
+    def test_scripts_are_executable_uv_scripts(self):
+        for script in (self.SKILL_DIR / "scripts").glob("*.py"):
+            self.assertTrue(script.stat().st_mode & 0o111, script.name)
+            head = script.read_text().splitlines()[:3]
+            self.assertEqual(head[0], "#!/usr/bin/env -S uv run --script")
+            self.assertEqual(head[1], "# /// script")
+
+    def test_tools_named_in_the_skill_exist_and_all_are_covered(self):
+        known = tool_names()
+        text = "\n".join(p.read_text() for p in self.SKILL_DIR.rglob("*.md"))
+        verbs = (
+            "create|set|get|lint|compile|render|cleanup|export|import|inspect|update|delete|move|duplicate|list"
+            "|search|fetch|markdown"
+        )
+        mentioned = set(re.findall(rf"\b((?:{verbs})_[a-z_]+)\b", text))
+        parameters = {"update_cells", "markdown_table"}
+        self.assertEqual(sorted(mentioned - known - parameters), [], "unknown tool names in the skill")
+        self.assertEqual(sorted(n for n in known if n not in text), [], "tools missing from the skill")
+
+    def test_dg_script_builds_a_valid_drawio(self):
+        import subprocess
+
+        with tempfile.TemporaryDirectory() as tmp:
+            spec = Path(tmp) / "spec.json"
+            spec.write_text(
+                '{"name": "t", "boxes": [{"id": "a", "label": "A", "x": 0, "y": 0, "w": 90, "h": 40},'
+                ' {"id": "b", "label": "B", "x": 200, "y": 0, "w": 90, "h": 40}],'
+                ' "edges": [{"from": "a", "to": "b", "label": "x"}]}'
+            )
+            out = Path(tmp) / "t.drawio"
+            script = self.SKILL_DIR / "scripts" / "dg.py"
+            subprocess.run([sys.executable, str(script), str(spec), str(out)], check=True, capture_output=True)
+            from crepe_mcp.linter import lint_drawio_file
+
+            report = lint_drawio_file(str(out))
+            self.assertTrue(report.valid, report.issues)
 
     def test_install_and_remove(self):
         setup = load_setup()
@@ -62,7 +151,8 @@ class SkillTests(unittest.TestCase):
             setup.AGENTS_MD_DST.write_text("legacy")
             self.assertTrue(setup.install_skill())
             self.assertTrue((setup.SKILL_DST / "SKILL.md").is_file())
-            self.assertTrue((setup.SKILL_DST / "references" / "guide.md").is_file())
+            self.assertTrue((setup.SKILL_DST / "references" / "troubleshooting.md").is_file())
+            self.assertTrue((setup.SKILL_DST / "scripts" / "dg.py").is_file())
             self.assertFalse(Path(str(setup.SKILL_DST) + ".tmp").exists())
             setup.remove_skill()
             self.assertFalse(setup.SKILL_DST.exists())

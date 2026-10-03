@@ -1,4 +1,4 @@
-Read AGENTS.md in the current directory first, then:
+Read the crepe skill (SKILL.md and the reference it points to for the task) first, then:
 
 1. Write a minimal valid .drawio XML file to /tmp/test_arch.drawio with:
    - One page named "Architecture"

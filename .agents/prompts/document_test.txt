@@ -1,4 +1,4 @@
-Read AGENTS.md in the current directory first, then use the CREPE MCP server tools to:
+Read the crepe skill (SKILL.md and the reference it points to for the task) first, then use the CREPE MCP server tools to:
 
 1. Create an A4 report document titled "AI Safety Summary", author "Research Team", date "2026"
 2. Add chapters and sections:
