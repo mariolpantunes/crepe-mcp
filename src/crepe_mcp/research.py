@@ -17,11 +17,14 @@ import glob
 import html
 import json
 import os
+import random
 import re
 import shutil
 import signal
 import subprocess
 import tempfile
+import threading
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -52,6 +55,56 @@ def _get_browser_lock() -> asyncio.Lock:
 # Academic search — Semantic Scholar
 # ---------------------------------------------------------------------------
 
+# Semantic Scholar: introductory keys allow 1 request/second, the shared no-key pool often answers 429.
+# Requests are paced to S2_MIN_INTERVAL per process and retried on 429/5xx/network errors with
+# exponential backoff (S2_BACKOFF_BASE * 2**attempt, plus jitter), honouring Retry-After up to S2_MAX_DELAY.
+S2_MIN_INTERVAL = 1.0
+S2_RETRIES = 4
+S2_BACKOFF_BASE = 1.0
+S2_MAX_DELAY = 30.0
+_s2_lock = threading.Lock()
+_s2_last_request = 0.0
+
+
+def _s2_pace() -> None:
+    """Sleep until S2_MIN_INTERVAL has passed since the previous Semantic Scholar request."""
+    global _s2_last_request
+    with _s2_lock:
+        wait = _s2_last_request + S2_MIN_INTERVAL - time.monotonic()
+        if wait > 0:
+            time.sleep(wait)
+        _s2_last_request = time.monotonic()
+
+
+def _s2_delay(attempt: int, retry_after: str | None) -> float:
+    """Seconds to wait before retry `attempt` (0-based): Retry-After if given, else exponential with jitter."""
+    if retry_after:
+        try:
+            return min(max(float(retry_after), 0.0), S2_MAX_DELAY)
+        except ValueError:
+            pass
+    return min(S2_BACKOFF_BASE * 2**attempt + random.uniform(0, S2_BACKOFF_BASE), S2_MAX_DELAY)
+
+
+def _s2_get(req: urllib.request.Request) -> dict:
+    """GET a Semantic Scholar URL with pacing and backoff; raises the last error when retries run out."""
+    for attempt in range(S2_RETRIES + 1):
+        _s2_pace()
+        try:
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                return json.loads(resp.read().decode())
+        except urllib.error.HTTPError as exc:
+            if attempt == S2_RETRIES or not (exc.code == 429 or exc.code >= 500):
+                raise
+            exc.close()  # release the error response before retrying
+            time.sleep(_s2_delay(attempt, exc.headers.get("Retry-After") if exc.headers else None))
+        except (urllib.error.URLError, TimeoutError):
+            if attempt == S2_RETRIES:
+                raise
+            time.sleep(_s2_delay(attempt, None))
+    raise AssertionError("unreachable")
+
+
 def academic_search(query: str, limit: int = 5) -> dict:
     """Search Semantic Scholar for academic papers. Reads CREPE_SEMANTIC_SCHOLAR_API_KEY if set."""
     limit = max(1, min(limit, 100))
@@ -68,8 +121,7 @@ def academic_search(query: str, limit: int = 5) -> dict:
 
     req = urllib.request.Request(url, headers=headers)
     try:
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            data = json.loads(resp.read().decode())
+        data = _s2_get(req)
     except urllib.error.HTTPError as exc:
         if exc.code == 429:
             return {
