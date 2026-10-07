@@ -247,11 +247,20 @@ loads every enabled schema up front.
 
 | Variable | Required For | Default / Auto-detection |
 |:---------|:-------------|:-------------------------|
-| `CREPE_TAVILY_API_KEY` | `web_search` tool | Prompts during setup or reads environment |
-| `CREPE_SEMANTIC_SCHOLAR_API_KEY` | `academic_search` rate limits | Optional (public tier used if unset) |
+| `CREPE_TAVILY_API_KEY` | `web_search` tool | `.env`; setup saves a key given by flag, prompt or `keys.md` there |
+| `CREPE_SEMANTIC_SCHOLAR_API_KEY` | `academic_search` rate limits | Optional, in `.env` (public tier used if unset) |
 | `CREPE_HEADLESS_BROWSER_PATH` | JavaScript-heavy `fetch_webpage` | Auto-detected from Chromium / Chrome / Brave |
 | `CREPE_LIBREOFFICE_PATH` | PPTX to PNG rendering | Auto-detected (`libreoffice` on PATH or Mac App) |
 | `CREPE_DRAWIO_PATH` | Headless diagram export | Auto-detected (`drawio` / `draw.io` on PATH) |
+| `CREPE_ENV_FILE` | Loading the API keys | Registered by setup: `<repo>/.env` |
+
+**API keys** live in `.env` at the repository root (gitignored, mode 600), never in the agent host configs: setup registers only `CREPE_ENV_FILE`, and every sub-server loads the file at startup. A variable already set in the environment wins over the file.
+
+```bash
+# ~/git/crepe-mcp/.env
+CREPE_TAVILY_API_KEY=tvly-...
+CREPE_SEMANTIC_SCHOLAR_API_KEY=...
+```
 
 ---
 

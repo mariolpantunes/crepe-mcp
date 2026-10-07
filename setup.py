@@ -32,6 +32,8 @@ except ImportError:
 SCRIPT_DIR = str(Path(__file__).resolve().parent)
 VENV_DIR = Path(SCRIPT_DIR) / "venv"
 AGENTS_MD_SRC = Path(__file__).resolve().parent / "AGENTS.md"
+# API keys live here, never in host configs; the servers load it via CREPE_ENV_FILE (gitignored).
+ENV_FILE = Path(SCRIPT_DIR) / ".env"
 
 # Target Config Paths
 GOOSE_CONFIG_DIR = Path.home() / ".config" / "goose"
@@ -198,6 +200,23 @@ def find_headless_browser() -> str | None:
         if os.path.isfile(p) and os.access(p, os.X_OK):
             return p
     return None
+
+
+def save_env_keys(values: dict[str, str]) -> None:
+    """Write API keys into ENV_FILE (mode 600): replace existing KEY= lines, append new ones."""
+    values = {k: v for k, v in values.items() if v}
+    if not values:
+        return
+    lines = ENV_FILE.read_text(encoding="utf-8").splitlines() if ENV_FILE.exists() else []
+    pending = dict(values)
+    for i, line in enumerate(lines):
+        key = line.strip().removeprefix("export ").split("=", 1)[0].strip()
+        if key in pending:
+            lines[i] = f"{key}={pending.pop(key)}"
+    lines += [f"{k}={v}" for k, v in pending.items()]
+    ENV_FILE.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    os.chmod(ENV_FILE, 0o600)
+    print(f"🔑 Saved {', '.join(values)} to {ENV_FILE}")
 
 
 def read_keys_file() -> dict[str, str]:
@@ -617,6 +636,15 @@ def run_install(args: argparse.Namespace) -> None:
     print(f"🚀 Installing CREPE MCP Server (`Option 1: Local Development` at {SCRIPT_DIR})")
     print(f"🎯 Selected Targets: {', '.join(targets)}\n")
 
+    # Keys already in .env count as set (no prompt); a flag still replaces them, keys.md only fills gaps.
+    sys.path.insert(0, str(Path(SCRIPT_DIR) / "src"))
+    from crepe_mcp._env import parse_env_file
+
+    if ENV_FILE.exists():
+        for key, value in parse_env_file(ENV_FILE).items():
+            os.environ.setdefault(key, value)
+        print(f"🔑 Using API keys from {ENV_FILE}")
+
     file_keys = read_keys_file()
     if file_keys:
         print("📄 Auto-detected API keys from keys.md")
@@ -700,12 +728,9 @@ def run_install(args: argparse.Namespace) -> None:
     profile_path = detect_shell_profile()
     update_shell_profile(profile_path, browser_path, libreoffice_path, drawio_path)
 
-    # 7. Build env dict
-    envs = {}
-    if tavily_key:
-        envs["CREPE_TAVILY_API_KEY"] = tavily_key
-    if ss_key:
-        envs["CREPE_SEMANTIC_SCHOLAR_API_KEY"] = ss_key
+    # 7. Keys go to the .env file; host configs only get its path (no secrets in them)
+    save_env_keys({"CREPE_TAVILY_API_KEY": tavily_key, "CREPE_SEMANTIC_SCHOLAR_API_KEY": ss_key})
+    envs = {"CREPE_ENV_FILE": str(ENV_FILE)}
     if browser_path:
         envs["CREPE_HEADLESS_BROWSER_PATH"] = browser_path
     if libreoffice_path:
