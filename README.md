@@ -258,6 +258,7 @@ loads every enabled schema up front.
 ## System Requirements
 
 - **Python**: `>=3.12`
+- **macOS (Homebrew)**: `brew install python pandoc` and `brew install --cask mactex-no-gui libreoffice drawio font-noto-sans brave-browser`
 - **Pandoc**: `>=3.0` (required for markdown compilation to PDF, PPTX, DOCX)
 - **LuaLaTeX / TeX Live**: `texlive-full` or MacTeX (required for PDF compilation)
 - **LibreOffice**: (Optional / recommended) For rasterizing PPTX slides to PNG sequences

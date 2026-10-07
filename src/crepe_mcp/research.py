@@ -21,6 +21,7 @@ import re
 import shutil
 import signal
 import subprocess
+import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -380,7 +381,7 @@ async def _ensure_browser() -> Any:
         _playwright_instance = pw
 
         profiles_before: set[str] = set(
-            glob.glob("/tmp/playwright_chromiumdev_profile-*")
+            glob.glob(os.path.join(tempfile.gettempdir(), "playwright_chromiumdev_profile-*"))
         )
         browser = await pw.chromium.launch(
             headless=True,
@@ -394,7 +395,7 @@ async def _ensure_browser() -> Any:
         _playwright_browser = browser
 
         profiles_after: set[str] = set(
-            glob.glob("/tmp/playwright_chromiumdev_profile-*")
+            glob.glob(os.path.join(tempfile.gettempdir(), "playwright_chromiumdev_profile-*"))
         )
         new_profiles = profiles_after - profiles_before
         if new_profiles:
