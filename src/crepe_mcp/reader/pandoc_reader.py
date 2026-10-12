@@ -137,19 +137,58 @@ def _cell(cell: list[Any]) -> str:
     return blocks_text(cell[4]).replace("|", "\\|").replace("\n", " ")
 
 
-def _rows(section: list[Any]) -> list[list[str]]:
-    return [[_cell(cell) for cell in row[1]] for row in section]
+def _rows(section: list[Any], repeat_colspan: bool = False) -> list[list[str]]:
+    """The rows of a table section as grid lines. A cell spanning rows repeats its text in the rows it covers, so
+    columns stay aligned; a cell spanning columns repeats in each of them when `repeat_colspan` (header labels)
+    and otherwise leaves the covered columns empty."""
+    lines: list[list[str]] = []
+    held: dict[int, tuple[int, str]] = {}  # column -> (rows still covered, text)
+
+    def fill(line: list[str]) -> None:
+        while len(line) in held:
+            left, text = held[len(line)]
+            line.append(text)
+            if left > 1:
+                held[len(line) - 1] = (left - 1, text)
+            else:
+                del held[len(line) - 1]
+
+    for row in section:
+        line: list[str] = []
+        for cell in row[1]:
+            fill(line)
+            text, rowspan, colspan = _cell(cell), cell[2], max(cell[3], 1)
+            for offset in range(colspan):
+                if rowspan > 1:
+                    held[len(line)] = (rowspan - 1, text)
+                line.append(text if offset == 0 or repeat_colspan else "")
+        fill(line)
+        lines.append(line)
+    return lines
+
+
+def _header(rows: list[list[str]], width: int) -> list[str]:
+    """One header line from several header rows: per column the distinct labels from top to bottom, joined by ' / '."""
+    columns: list[str] = []
+    for index in range(width):
+        labels: list[str] = []
+        for row in rows:
+            label = row[index] if index < len(row) else ""
+            if label and label not in labels:
+                labels.append(label)
+        columns.append(" / ".join(labels))
+    return columns
 
 
 def table_markdown(table: list[Any]) -> str:
-    """A pandoc Table as a GitHub pipe table; a table without a header row gets an empty one."""
-    head = _rows(table[3][1])
+    """A pandoc Table as a GitHub pipe table; several header rows become one (group / column), merged cells keep
+    the columns aligned, and a table without a header row gets an empty one."""
+    head = _rows(table[3][1], repeat_colspan=True)
     body = [row for tbody in table[4] for row in _rows(tbody[2] + tbody[3])] + _rows(table[5][1])
     width = max((len(row) for row in [*head, *body]), default=0)
     if width == 0:
         return ""
-    pad = [[*row, *[""] * (width - len(row))] for row in (head[-1:] or [[""] * width])]
-    header = pad[0]
+    header = _header(head, width)
     lines = ["| " + " | ".join(header) + " |", "|" + "|".join("---" for _ in header) + "|"]
     lines += ["| " + " | ".join([*row, *[""] * (width - len(row))]) + " |" for row in body]
     return "\n".join(lines)
