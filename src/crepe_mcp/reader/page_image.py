@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import hashlib
 import os
+import shutil
 import tempfile
+import time
 from pathlib import Path
 from typing import Literal
 
@@ -25,6 +27,8 @@ SUFFIXES: dict[str, tuple[str, ...]] = {"png": (".png",), "jpeg": (".jpg", ".jpe
 OFFICE_SUFFIXES = (".docx", ".odt", ".rtf", ".pptx")
 JPEG_QUALITY = 85
 CONVERT_TIMEOUT = 180
+CACHE_MAX_AGE = 7 * 24 * 3600  # seconds a converted PDF is kept after its last use
+WORK_MAX_AGE = 3600  # seconds after which an interrupted conversion's folder is removed
 
 
 def check_output_path(output_path: str, fmt: ImageFormat) -> Path:
@@ -36,13 +40,31 @@ def check_output_path(output_path: str, fmt: ImageFormat) -> Path:
     return target
 
 
+def _evict(base: Path) -> None:
+    """Remove converted PDFs not used for CACHE_MAX_AGE seconds and conversion folders an interrupted run left."""
+    now = time.time()
+    for entry in base.iterdir():
+        limit = WORK_MAX_AGE if entry.name.startswith("convert-") else CACHE_MAX_AGE
+        try:
+            if entry.is_dir() and now - entry.stat().st_mtime > limit:
+                shutil.rmtree(entry, ignore_errors=True)
+        except OSError:
+            continue
+
+
 def _converted_pdf(source: Path) -> Path:
-    """The PDF LibreOffice makes of an Office file, converted once and reused while the file is unchanged."""
+    """The PDF LibreOffice makes of an Office file, converted once and reused while the file is unchanged.
+
+    The cache lives in the reader's scratch folder with owner-only permissions (the PDF holds the document's
+    text) and entries unused for CACHE_MAX_AGE seconds are removed when a new conversion is made.
+    """
     stat = source.stat()
     key = f"{source}|{stat.st_size}|{stat.st_mtime_ns}"
-    folder = scratch_base() / "office-pdf" / hashlib.sha256(key.encode()).hexdigest()[:24]
+    base = scratch_base() / "office-pdf"
+    folder = base / hashlib.sha256(key.encode()).hexdigest()[:24]
     cached = folder / f"{source.stem}.pdf"
     if cached.is_file():
+        os.utime(folder)  # a document still in use does not age out
         return cached
     command = find_libreoffice()
     if command is None:
@@ -50,19 +72,21 @@ def _converted_pdf(source: Path) -> Path:
             f"Rendering a {source.suffix} page needs LibreOffice, which was not found. Install it or set "
             "CREPE_LIBREOFFICE_PATH; or save the document as PDF first."
         )
-    folder.parent.mkdir(parents=True, exist_ok=True)
-    work = tempfile.mkdtemp(prefix="convert-", dir=folder.parent)
+    base.mkdir(parents=True, exist_ok=True)
+    os.chmod(base, 0o700)
+    _evict(base)
+    work = tempfile.mkdtemp(prefix="convert-", dir=base)  # mkdtemp folders are 0700
     try:
         try:
             pdf = office_to_pdf(command, str(source), work, timeout=CONVERT_TIMEOUT)
         except RuntimeError as error:
             raise ReaderError(str(error)) from error
         folder.mkdir(parents=True, exist_ok=True)
+        os.chmod(folder, 0o700)
+        os.chmod(pdf, 0o600)
         os.replace(pdf, cached)
     finally:
-        for leftover in Path(work).glob("*"):
-            leftover.unlink(missing_ok=True)
-        Path(work).rmdir()
+        shutil.rmtree(work, ignore_errors=True)
     return cached
 
 
