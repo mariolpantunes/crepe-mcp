@@ -97,8 +97,9 @@ def main(argv):
     import json
 
     if len(argv) != 3:
-        print(__doc__, file=sys.stderr)
-        return 2
+        asked = len(argv) > 1 and argv[1] in ("-h", "--help")
+        print(__doc__, file=sys.stdout if asked else sys.stderr)
+        return 0 if asked else 2
     spec = json.loads(Path(argv[1]).read_text(encoding="utf-8"))
     d = Diagram(spec.get("name", "diagram"), spec.get("width", 1200), spec.get("height", 700))
     ids = {}

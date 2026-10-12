@@ -32,6 +32,7 @@ from bisect import bisect_left, bisect_right
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
+from time import monotonic
 from typing import Any
 
 import pymupdf as fitz
@@ -825,7 +826,7 @@ def _expand(spec: str, highest: int) -> list[str]:
 
 PARALLEL_MIN_TABLE_PAGES = 3  # fewer table pages are faster in one process than the workers' start-up
 MAX_GEOMETRY_WORKERS = 8
-WORKER_TIMEOUT = 600  # seconds a worker may take before its pages are computed here instead
+WORKER_TIMEOUT = 600  # seconds all workers together may take before their pages are computed here instead
 
 
 def _geometries_in_workers(
@@ -842,6 +843,7 @@ def _geometries_in_workers(
     with tempfile.TemporaryDirectory(prefix="crepe-geometry-") as tmp:
         running: list[tuple[subprocess.Popen[bytes], Path]] = []
         try:
+            deadline = monotonic() + WORKER_TIMEOUT
             for index in range(workers):
                 share = numbers[index::workers]
                 tasks, out = Path(tmp) / f"tasks{index}.pkl", Path(tmp) / f"out{index}.pkl"
@@ -851,10 +853,12 @@ def _geometries_in_workers(
                                                  stderr=subprocess.DEVNULL), out))
             for process, out in running:
                 try:
-                    if process.wait(timeout=WORKER_TIMEOUT) == 0 and out.is_file():
+                    if process.wait(timeout=max(0.0, deadline - monotonic())) == 0 and out.is_file():
                         found.update(pickle.loads(out.read_bytes()))
                 except subprocess.TimeoutExpired:
                     process.kill()
+                except Exception:  # a truncated or foreign output only loses this worker's pages
+                    pass
         except OSError:
             pass
         finally:

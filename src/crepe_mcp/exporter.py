@@ -17,6 +17,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from time import monotonic
 
 
 def _find_libreoffice() -> list[str] | None:
@@ -105,7 +106,7 @@ find_libreoffice = _find_libreoffice
 
 RENDER_PARALLEL_MIN_PAGES = 4  # fewer pages are faster in one process than the workers' start-up
 MAX_RENDER_WORKERS = 8
-RENDER_WORKER_TIMEOUT = 600
+RENDER_WORKER_TIMEOUT = 600  # seconds all workers together may take
 
 
 def _render_in_workers(pdf_path: str, output_dir: str, dpi: int, count: int) -> bool:
@@ -118,6 +119,7 @@ def _render_in_workers(pdf_path: str, output_dir: str, dpi: int, count: int) -> 
     running: list[subprocess.Popen[bytes]] = []
     ok = True
     try:
+        deadline = monotonic() + RENDER_WORKER_TIMEOUT
         for index in range(workers):
             pages = [str(number) for number in range(1 + index, count + 1, workers)]
             cmd = [sys.executable, "-m", "crepe_mcp.render_worker", pdf_path, output_dir, str(dpi), *pages]
@@ -125,7 +127,7 @@ def _render_in_workers(pdf_path: str, output_dir: str, dpi: int, count: int) -> 
                                             stderr=subprocess.DEVNULL))
         for process in running:
             try:
-                ok = process.wait(timeout=RENDER_WORKER_TIMEOUT) == 0 and ok
+                ok = process.wait(timeout=max(0.0, deadline - monotonic())) == 0 and ok
             except subprocess.TimeoutExpired:
                 ok = False
     except OSError:

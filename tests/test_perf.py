@@ -5,6 +5,7 @@ Run with: python -m unittest discover -s tests -p "test_perf.py" -v
 import hashlib
 import os
 import random
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -35,6 +36,39 @@ def dump(doc_store_: DocumentStore) -> dict[str, str]:
 def make_line(i: int, column: int, y0: float, height: float) -> Line:
     return Line(id=i, page=1, seq=i, region="body", column=column, x0=0.0, y0=y0, x1=10.0, y1=y0 + height,
                 text="x", font="f", size=10.0, bold=False, italic=False, mono=False, color=0)
+
+
+class FakeClock:
+    """A monotonic clock that only moves when a fake worker is waited on."""
+
+    def __init__(self) -> None:
+        self.now = 0.0
+
+    def __call__(self) -> float:
+        return self.now
+
+
+def hung_worker_class(clock: FakeClock, waits: list[float]):
+    """A Popen stand-in that never finishes: each timed wait spends its whole timeout on the fake clock."""
+
+    class HungWorker:
+        def __init__(self, *args, **kwargs) -> None:
+            self.killed = False
+
+        def wait(self, timeout: float | None = None) -> int:
+            if self.killed or timeout is None:
+                return -9
+            waits.append(timeout)
+            clock.now += timeout
+            raise subprocess.TimeoutExpired("worker", timeout)
+
+        def poll(self) -> int | None:
+            return -9 if self.killed else None
+
+        def kill(self) -> None:
+            self.killed = True
+
+    return HungWorker
 
 
 class TestRowIndex(unittest.TestCase):
@@ -81,6 +115,27 @@ class TestParallelGeometry(IsolatedTestCase):
         with mock.patch.object(assets_module, "_geometries_in_workers", return_value={}):
             fallback, _ = self.build_dump("em_long_review", 2)
         self.assertEqual(fallback, plain)
+
+
+    def test_an_unreadable_worker_output_falls_back_to_the_parent(self):
+        plain, _ = self.build_dump("em_long_review", 10**6)
+        with mock.patch.object(assets_module.pickle, "loads", side_effect=EOFError("truncated")):
+            fallback, workers = self.build_dump("em_long_review", 2)
+        self.assertGreaterEqual(workers, 2)
+        self.assertEqual(fallback, plain)
+
+    def test_hung_workers_share_one_deadline(self):
+        clock, waits = FakeClock(), []
+        with mock.patch.object(assets_module, "WORKER_TIMEOUT", 10), \
+                mock.patch.object(assets_module, "monotonic", clock), \
+                mock.patch.object(assets_module.os, "cpu_count", return_value=4), \
+                mock.patch.object(assets_module.subprocess, "Popen", hung_worker_class(clock, waits)):
+            numbers = [1, 2, 3, 4]
+            found = assets_module._geometries_in_workers(
+                Path("unused.pdf"), numbers, {n: n for n in numbers}, None, {n: (0.0, 0.0) for n in numbers})
+        self.assertEqual(found, {})
+        self.assertEqual(len(waits), 4)
+        self.assertLessEqual(sum(waits), 10)
 
 
 class TestParallelLint(unittest.TestCase):
@@ -143,6 +198,17 @@ class TestParallelRender(unittest.TestCase):
             self.assertEqual([Path(n).name for n in names], [f"slide_{i:03d}.png" for i in range(1, 8)])
             for parallel, plain in zip(names, serial, strict=True):
                 self.assertEqual(Path(parallel).read_bytes(), Path(plain).read_bytes())
+
+    def test_hung_workers_share_one_deadline(self):
+        clock, waits = FakeClock(), []
+        with mock.patch.object(exporter, "RENDER_WORKER_TIMEOUT", 10), \
+                mock.patch.object(exporter, "monotonic", clock), \
+                mock.patch.object(exporter.os, "cpu_count", return_value=4), \
+                mock.patch.object(exporter.subprocess, "Popen", hung_worker_class(clock, waits)):
+            ok = exporter._render_in_workers("unused.pdf", "unused", 40, 8)
+        self.assertFalse(ok)
+        self.assertEqual(len(waits), 4)
+        self.assertLessEqual(sum(waits), 10)
 
     def test_falls_back_when_workers_cannot_start(self):
         with tempfile.TemporaryDirectory() as tmp:

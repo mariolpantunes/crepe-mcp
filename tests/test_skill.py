@@ -143,6 +143,16 @@ class SkillTests(unittest.TestCase):
             report = lint_drawio_file(str(out))
             self.assertTrue(report.valid, report.issues)
 
+    def test_dg_script_help_exits_zero_on_stdout(self):
+        import subprocess
+
+        script = self.SKILL_DIR / "scripts" / "dg.py"
+        done = subprocess.run([sys.executable, str(script), "--help"], capture_output=True, text=True)
+        self.assertEqual(done.returncode, 0)
+        self.assertIn("dg.py", done.stdout)
+        bare = subprocess.run([sys.executable, str(script)], capture_output=True, text=True)
+        self.assertEqual(bare.returncode, 2)
+
     def test_install_and_remove(self):
         setup = load_setup()
         with tempfile.TemporaryDirectory() as tmp:
