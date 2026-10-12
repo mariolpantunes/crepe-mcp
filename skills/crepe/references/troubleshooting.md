@@ -26,7 +26,7 @@ CREPE is six MCP servers: `crepe-presentations`, `crepe-documents`, `crepe-resea
 | `render_*_as_pngs` fails | The matching compile did not run first, or PPTX/DOCX rendering has no LibreOffice. PDF rendering needs nothing extra. |
 | `open_document` says `Pass the absolute path` / `outside the folders` | Give the absolute path; if `CREPE_READER_ROOTS` is set, the file must be inside one of those folders. |
 | `open_document` says pandoc could not read the file | Wrong extension or a damaged file; for PDF no pandoc is needed. |
-| Reader pages say `no text layer` | A scanned PDF: use `render_page_png`; text cannot be extracted. |
+| Reader pages say `no text layer` | A scanned PDF: use `render_page_image`; text cannot be extracted. |
 | `export_drawio` fails | draw.io is not installed or `CREPE_DRAWIO_PATH` is wrong; or the file failed `lint_drawio`. |
 | `web_search` returns `warning` | `CREPE_TAVILY_API_KEY` is missing from the `.env`. Report it; use other tools. |
 | `fetch_webpage` warns about a browser | No Chromium at `CREPE_HEADLESS_BROWSER_PATH`: the text may lack JavaScript content. |

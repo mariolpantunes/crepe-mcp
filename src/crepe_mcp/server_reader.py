@@ -1,4 +1,4 @@
-"""CREPE — Reader sub-server (Group G, 8 tools).
+"""CREPE — Reader sub-server (Group G, 9 tools).
 
 Deterministic decomposition and analysis of existing documents: PDF, and DOCX, ODT, RTF, EPUB, HTML, LaTeX,
 reStructuredText, Markdown, Org, Jupyter, PPTX, XLSX, CSV through pandoc. No LLM is involved: a file is read
@@ -9,9 +9,9 @@ Can be run as a standalone MCP server:
 
 Tools
 -----
-Group G (8):
+Group G (9):
   open_document, read_pages, read_section, search_document, list_assets, get_asset,
-  render_page_png, document_to_markdown
+  list_changes, render_page_image, document_to_markdown
 """
 
 from __future__ import annotations
@@ -23,7 +23,6 @@ from functools import wraps
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
-import pymupdf
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 from fastmcp.utilities.types import Image
@@ -34,6 +33,8 @@ from crepe_mcp.reader import crops, reading
 from crepe_mcp.reader.common import ReaderError, page_span, resolve_path
 from crepe_mcp.reader.markdown_export import export_markdown
 from crepe_mcp.reader.overview import overview, part_range
+from crepe_mcp.reader.page_image import ImageFormat, check_output_path, render_page
+from crepe_mcp.reader.review_marks import read_marks, summary
 from crepe_mcp.reader.store import DocumentStore
 from crepe_mcp.runner import run_server
 
@@ -46,7 +47,9 @@ CREPE Reader Engine Guidelines:
    is none. read_section reads one section by its heading; search_document finds where a term is mentioned.
 4. list_assets lists numbered figures, tables, equations, algorithms, listings and references; get_asset returns one
    as text (tables as Markdown, equations as TeX) with the sentences citing it.
-5. render_page_png shows a PDF page as an image; document_to_markdown writes the whole document to a .md file.
+5. list_changes lists the tracked changes and comments of a DOCX (the text tools show the accepted view).
+6. render_page_image shows a page of a PDF, DOCX, ODT, RTF or PPTX as an image (png or jpeg);
+   document_to_markdown writes the whole document to a .md file.
 """
 
 # Reply budgets, not layout heuristics.
@@ -139,12 +142,16 @@ def read_section(
         ),
     ],
     part: Part = "all",
+    cursor: Annotated[
+        str | None, Field(max_length=20, description="next cursor of the previous reply of this section.")
+    ] = None,
 ) -> str:
-    """Read one section by its outline heading, up to the next heading of the same or higher level. If nothing
+    """Read one section by its outline heading, up to the next heading of the same or higher level, about 12,000
+    characters per call: a longer section ends with a next cursor, pass it as cursor to continue. If nothing
     matches, the error lists the headings."""
     _, store = _open(path)
     first, last = part_range(store, part)
-    return reading.read_section(store, heading, first, last)
+    return reading.read_section(store, heading, first, last, cursor)
 
 
 @mcp.tool(annotations={"readOnlyHint": True, "idempotentHint": True})
@@ -214,8 +221,8 @@ def get_asset(
     asset: Annotated[
         str,
         Field(
-            pattern=r"^[a-z]+:[A-Za-z0-9.]+$",
-            description="Item id from list_assets, e.g. 'figure:3', 'table:II', 'reference:12'.",
+            pattern=r"^[a-z]+:[A-Za-z0-9.-]+$",
+            description="Item id from list_assets, e.g. 'figure:3', 'table:II', 'reference:12', 'table:1-2'.",
         ),
     ],
     include_image: Annotated[
@@ -271,50 +278,75 @@ def get_asset(
     return [text, image] if image is not None else [text]
 
 
+@mcp.tool(annotations={"readOnlyHint": True, "idempotentHint": True})
+@_agent_errors
+def list_changes(
+    path: DocPath,
+    kind: Annotated[
+        Literal["all", "insertion", "deletion", "comment"], Field(description="Which marks to list (default all).")
+    ] = "all",
+    max_items: Annotated[int, Field(ge=1, le=500, description="Most marks to return.")] = 100,
+) -> dict[str, Any]:
+    """List what reviewers marked in a DOCX: tracked insertions and deletions (author, date, text) and comments
+    (author, date, comment text, the text it is attached to), in document order with the section of each. The other
+    tools show the accepted view, without comments. Counts cover the whole file; items are cut at max_items."""
+    resolved = resolve_path(path)
+    if resolved.suffix.lower() != ".docx":
+        raise ReaderError("Tracked changes and comments are read from DOCX files only.")
+    return summary(read_marks(resolved), kind, max_items)
+
+
 @mcp.tool(annotations={"readOnlyHint": True})
 @_agent_errors
-def render_page_png(
+def render_page_image(
     path: DocPath,
-    page: Annotated[int, Field(ge=1, description="PDF page number.")],
+    page: Annotated[
+        int,
+        Field(
+            ge=1,
+            description="Page number: a PDF page; for DOCX, ODT, RTF and PPTX the page (slide) as LibreOffice "
+            "lays it out, which is not the logical page of read_pages.",
+        ),
+    ],
     dpi: Annotated[int, Field(ge=36, le=300, description="Resolution; 100 is readable and small.")] = 100,
+    format: Annotated[ImageFormat, Field(description="png (default, lossless) or jpeg (smaller).")] = "png",
     output_path: Annotated[
-        str | None, Field(max_length=1024, description="Absolute .png path to save to; omit to get the image back.")
+        str | None,
+        Field(max_length=1024, description="Absolute .png or .jpg path to save to; omit to get the image back."),
     ] = None,
 ) -> list[Any]:
-    """Show one page of a PDF as an image (for layout, figures and scans that text cannot describe). With
-    output_path the PNG is saved there (e.g. to embed it in a deck) and its size is returned."""
-    resolved, store = _open(path)
-    if resolved.suffix.lower() != ".pdf":
-        raise ReaderError("render_page_png works on PDF files; convert the document to PDF first.")
-    if page > store.page_count:
-        raise ReaderError(f"Page {page} is outside this PDF (1-{store.page_count}).")
-    with pymupdf.open(str(resolved)) as doc:
-        data = doc[page - 1].get_pixmap(matrix=pymupdf.Matrix(dpi / 72, dpi / 72), alpha=False).tobytes("png")
-    if output_path is None:
-        return [Image(data=data, format="png")]
-    target = Path(output_path)
-    if not target.is_absolute() or target.suffix.lower() != ".png":
-        raise ReaderError("output_path must be an absolute path ending in .png")
+    """Show one page of a PDF, DOCX, ODT, RTF or PPTX as an image (for layout, figures and scans that text cannot
+    describe). Office files are laid out by LibreOffice, so it must be installed. With output_path the image is
+    saved there (e.g. to embed it in a deck) and its size is returned."""
+    resolved = resolve_path(path)
+    target = check_output_path(output_path, format) if output_path is not None else None
+    data, count = render_page(resolved, page, dpi, format)
+    if target is None:
+        return [Image(data=data, format=format)]
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_bytes(data)
-    saved = {"output_path": str(target), "bytes": len(data), "page": page, "dpi": dpi}
+    saved = {"output_path": str(target), "bytes": len(data), "page": page, "pages": count, "dpi": dpi, "format": format}
     return [TextContent(type="text", text=json.dumps(saved))]
 
 
-@mcp.tool(annotations={"destructiveHint": False, "idempotentHint": True})
+@mcp.tool(annotations={"destructiveHint": True, "idempotentHint": True})
 @_agent_errors
 def document_to_markdown(
     path: DocPath,
     output_path: Annotated[str, Field(max_length=1024, description="Absolute path of the .md file to write.")],
     part: Part = "all",
+    overwrite: Annotated[
+        bool, Field(description="Replace output_path if it already exists (default: refuse).")
+    ] = False,
 ) -> dict[str, Any]:
     """Write the document as one Markdown file (pandoc GFM for non-PDF formats, extracted text with headings and
-    tables for PDF) that can be edited and used in a CREPE deck or document. Returns the file size, not its text."""
+    tables for PDF) that can be edited and used in a CREPE deck or document. Returns the file size, not its text.
+    Refuses to write over the source document, and over any existing file unless overwrite=true."""
     resolved, store = _open(path)
     target = Path(output_path)
     if not target.is_absolute():
         raise ReaderError("output_path must be an absolute path")
-    return export_markdown(store, resolved, target, part)
+    return export_markdown(store, resolved, target, part, overwrite)
 
 
 def main() -> None:

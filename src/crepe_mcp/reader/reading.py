@@ -11,6 +11,7 @@ from crepe_mcp.reader.store import DocumentStore
 READ_BUDGET = 12_000  # characters per reply
 REFERENCES_OMITTED = "[reference list entries omitted: list_assets(kind='reference') lists them]"
 CURSOR_RE = re.compile(r"^p?(\d{1,5})(?:@(\d{1,7}))?$")
+SECTION_CURSOR_RE = re.compile(r"^s(\d{1,6})(?:@(\d{1,8}))?$")
 SECTION_NUMBER_RE = re.compile(r"^\s*(?:[IVX]+|[A-Z]|\d+(?:\.\d+)*)[.)]?(?:\s+(?=\S)|\s*$)", re.IGNORECASE)
 
 
@@ -20,6 +21,16 @@ def parse_cursor(cursor: str) -> tuple[int, int]:
     if not match:
         raise ReaderError(
             f"Cursor {cursor[:40]!r} is not valid: pass the 'next' value of the previous reply unchanged."
+        )
+    return int(match.group(1)), int(match.group(2) or 0)
+
+
+def parse_section_cursor(cursor: str) -> tuple[int, int]:
+    """(paragraph index within the section, character offset) of a read_section 'next' value such as 's3@4000'."""
+    match = SECTION_CURSOR_RE.match(cursor.strip())
+    if not match:
+        raise ReaderError(
+            f"Cursor {cursor[:40]!r} is not valid: pass the 'next' value of the previous read_section reply unchanged."
         )
     return int(match.group(1)), int(match.group(2) or 0)
 
@@ -79,9 +90,10 @@ def section_label(section: dict[str, Any]) -> str:
     return f"{section['number']} {section['title']}".strip()
 
 
-def read_section(store: DocumentStore, heading: str, first: int, last: int) -> str:
+def read_section(store: DocumentStore, heading: str, first: int, last: int, cursor: str | None = None) -> str:
     """One outline section of pages first..last, up to the next heading of the same or a higher level, as plain text
-    under a status line."""
+    under a status line. Up to the budget per call: a section that is longer continues with an 's<paragraph>@<offset>'
+    cursor, which also splits a single paragraph larger than the budget at a line break or space."""
     sections = [s for s in store.outline() if first <= s["page"] <= last]
     wanted = _heading_key(heading)
     number = heading.strip().rstrip(".)").upper()
@@ -95,22 +107,35 @@ def read_section(store: DocumentStore, heading: str, first: int, last: int) -> s
         raise ReaderError(
             f"No heading matches {heading[:80]!r}. Headings: {labels}. Pass one of them, or use search_document."
         )
+    paragraphs = [p for p in store.section_paragraphs(match["id"]) if p["page"] <= last]
+    index, offset = parse_section_cursor(cursor) if cursor else (0, 0)
+    if cursor and (index >= len(paragraphs) or offset > len(paragraphs[index]["text"])):
+        raise ReaderError("The cursor is outside this section: start again without a cursor.")
     parts: list[str] = []
     used = 0
-    end_page = match["page"]
-    next_page: int | None = None
-    for paragraph in store.section_paragraphs(match["id"]):
-        if paragraph["page"] > last:
+    next_cursor: str | None = None
+    first_page = paragraphs[index]["page"] if paragraphs else match["page"]
+    end_page = first_page
+    for position in range(index, len(paragraphs)):
+        paragraph = paragraphs[position]
+        text = paragraph["text"][offset:] if position == index else paragraph["text"]
+        if parts and used + len(text) > READ_BUDGET:
+            next_cursor = f"s{position}"
             break
-        if parts and used + len(paragraph["text"]) > READ_BUDGET:
-            next_page = paragraph["page"]
+        if len(text) > READ_BUDGET:
+            cut = max(text.rfind("\n", 0, READ_BUDGET), text.rfind(" ", 0, READ_BUDGET))
+            cut = cut if cut > 0 else READ_BUDGET
+            parts.append(text[:cut])
+            resume = cut + 1 if text[cut : cut + 1].isspace() else cut
+            next_cursor = f"s{position}@{(offset if position == index else 0) + resume}"
+            end_page = paragraph["page"]
             break
-        parts.append(paragraph["text"][:READ_BUDGET])
-        used += len(parts[-1]) + 2
+        parts.append(text)
+        used += len(text) + 2
         end_page = paragraph["last_page"]
-    span = page_span(match["page"], end_page)
+    span = page_span(first_page, end_page)
     status = f"Section {section_label(match)} (level {match['level']}, page{'s' if '-' in span else ''} {span}). "
-    status += f"next: page {next_page}, continue with read_pages first_page={next_page}" if next_page else "next: none"
+    status += f"next: {next_cursor}, continue with read_section cursor='{next_cursor}'" if next_cursor else "next: none"
     return f"{status}\n\n" + "\n\n".join(parts)
 
 

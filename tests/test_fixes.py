@@ -631,7 +631,7 @@ class TestT09SubServerExports(unittest.TestCase):
         self.assertEqual(len(asyncio.run(res_mcp.list_tools())), 6)
         self.assertEqual(len(asyncio.run(xl_mcp.list_tools())), 4)
         self.assertEqual(len(asyncio.run(diag_mcp.list_tools())), 3)
-        self.assertEqual(len(asyncio.run(reader_mcp.list_tools())), 8)
+        self.assertEqual(len(asyncio.run(reader_mcp.list_tools())), 9)
 
 
 class TestT10RobustnessAndNativeDrawio(unittest.TestCase):

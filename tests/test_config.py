@@ -17,6 +17,27 @@ class TestParseEnv(unittest.TestCase):
         text = "# c\n\nA=1\nexport B='two words'\nC=\"3\"\nD=4 # note\nbad line\n=x\n"
         self.assertEqual(config.parse_env(text), {"A": "1", "B": "two words", "C": "3", "D": "4"})
 
+    def test_parses_the_formats_of_a_plain_dotenv(self):
+        text = "# comment\n\nA=1\nexport B=\"two words\"\nC='x=y'\nnot a pair\n"
+        self.assertEqual(config.parse_env(text), {"A": "1", "B": "two words", "C": "x=y"})
+
+    def test_importing_the_package_loads_nothing(self):
+        import subprocess
+        import sys
+
+        path = Path(tempfile.mkdtemp()) / "x.env"
+        path.write_text("CREPE_T_IMPORT=loaded\n")
+        path.chmod(0o600)
+        env = {**os.environ, config.ENV_FILE_VAR: str(path), "PYTHONPATH": str(Path(config.__file__).parents[1])}
+        out = subprocess.run(
+            [sys.executable, "-c", "import os, crepe_mcp; print(os.environ.get('CREPE_T_IMPORT', 'unset'))"],
+            env=env,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        self.assertEqual(out.stdout.strip(), "unset")
+
 
 class TestLoadEnv(unittest.TestCase):
     def setUp(self):

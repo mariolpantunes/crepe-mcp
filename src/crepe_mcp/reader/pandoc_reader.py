@@ -45,7 +45,8 @@ def pandoc_version() -> str:
 def parse(path: Path, fmt: str) -> dict[str, Any]:
     """The pandoc JSON AST of a file."""
     pandoc_version()
-    cmd = ["pandoc", "-f", fmt, "-t", "json", "--wrap=none", str(path)]
+    # --sandbox: pandoc reads only the file named here, never one a document includes (LaTeX \input, ...)
+    cmd = ["pandoc", "--sandbox", "-f", fmt, "-t", "json", "--wrap=none", str(path)]
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=PANDOC_TIMEOUT)
     except subprocess.TimeoutExpired as error:
@@ -185,6 +186,7 @@ class _Walker:
     assets: list[_Asset] = field(default_factory=list)
     counts: dict[str, int] = field(default_factory=dict)
     stack: list[tuple[int, int]] = field(default_factory=list)  # (level, section id)
+    taken: set[str] = field(default_factory=set)  # asset ids already given out
 
     def add(self, kind: str, text: str, level: int = 0) -> _Para:
         section = self.stack[-1][1] if self.stack else 0
@@ -195,11 +197,21 @@ class _Walker:
         return para
 
     def next_number(self, kind: str, explicit: str | None = None) -> str:
+        """The number of the next item of a kind; an explicit caption number that is already taken (a restarted
+        appendix, a copied caption) becomes `1-2`, `1-3`, ... so that every item keeps its own id."""
         if explicit:
             self.counts[kind] = max(self.counts.get(kind, 0), int(explicit))
-            return explicit
-        self.counts[kind] = self.counts.get(kind, 0) + 1
-        return str(self.counts[kind])
+            number = explicit
+        else:
+            self.counts[kind] = self.counts.get(kind, 0) + 1
+            number = str(self.counts[kind])
+        repeat = 1
+        unique = number
+        while f"{kind}:{unique}" in self.taken:
+            repeat += 1
+            unique = f"{number}-{repeat}"
+        self.taken.add(f"{kind}:{unique}")
+        return unique
 
     def asset(
         self, kind: str, caption: str, content: str, content_format: str, paragraph: int, explicit: str | None

@@ -5,7 +5,7 @@ license: MIT
 compatibility: Needs the crepe-* MCP servers (run setup.py --install in the crepe-mcp repo). PDF output needs pandoc and lualatex; PPTX/DOCX previews need LibreOffice; reading non-PDF files needs pandoc; diagrams need draw.io; fetch_webpage uses Chromium.
 metadata:
   author: Mario Antunes
-  version: "0.3.0"
+  version: "0.3.1"
 ---
 
 # crepe
@@ -27,7 +27,7 @@ CREPE is six MCP servers, one per domain. Paths below are relative to this skill
 | A4 report or paper | `crepe-documents` | `create_document`, `set_chapter` and `set_section`, `lint_document`, `compile_document`, `render_document_as_pngs`, `cleanup_document` | `references/documents.md` |
 | draw.io figure | `crepe-diagrams` | write the `.drawio` (or `scripts/dg.py`), `lint_drawio`, `export_drawio` | `references/diagrams.md` |
 | Papers, web, Wikipedia | `crepe-research` | `academic_search` or `arxiv_search`, `web_search`, `wikipedia_search` then `wikipedia_read`, `fetch_webpage` | `references/research.md` |
-| Read, review or cite an existing file (PDF, DOCX, Markdown, ...) | `crepe-reader` | `open_document`, `read_section` / `search_document` / `read_pages`, `list_assets`, `get_asset`, `render_page_png`, `document_to_markdown` | `references/reader.md` |
+| Read, review or cite an existing file (PDF, DOCX, Markdown, ...) | `crepe-reader` | `open_document`, `read_section` / `search_document` / `read_pages`, `list_assets`, `get_asset`, `list_changes` (DOCX), `render_page_image`, `document_to_markdown` | `references/reader.md` |
 | Excel workbook | `crepe-spreadsheets` | `create_excel`, `update_excel_sheet`, `inspect_excel`, `markdown_table_to_excel` | `references/spreadsheets.md` |
 
 ## Rules

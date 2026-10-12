@@ -31,10 +31,17 @@ def pdf_markdown(store: DocumentStore, first: int, last: int) -> str:
     return "\n\n".join(out) + "\n"
 
 
-def export_markdown(store: DocumentStore, path: Path, output: Path, part: str) -> dict[str, object]:
-    """Write the document to `output` (absolute, .md) and say what was written."""
+def export_markdown(
+    store: DocumentStore, path: Path, output: Path, part: str, overwrite: bool = False
+) -> dict[str, object]:
+    """Write the document to `output` (absolute, .md) and say what was written. The source file is never
+    replaced, and an existing file only with overwrite=True."""
     if output.suffix.lower() not in (".md", ".markdown"):
         raise ReaderError("output_path must end in .md")
+    if output.exists() and output.samefile(path):
+        raise ReaderError(f"output_path is the source document itself ({path.name!r}); choose another file.")
+    if output.exists() and not overwrite:
+        raise ReaderError(f"{output.name!r} already exists; pass overwrite=true to replace it or choose another path.")
     output.parent.mkdir(parents=True, exist_ok=True)
     first, last = part_range(store, part)
     suffix = path.suffix.lower()
@@ -42,7 +49,18 @@ def export_markdown(store: DocumentStore, path: Path, output: Path, part: str) -
         output.write_text(pdf_markdown(store, first, last), encoding="utf-8")
         method = "extracted text"
     else:
-        cmd = ["pandoc", "-f", PANDOC_FORMATS[suffix], "-t", "gfm", "--wrap=none", "-o", str(output), str(path)]
+        cmd = [
+            "pandoc",
+            "--sandbox",
+            "-f",
+            PANDOC_FORMATS[suffix],
+            "-t",
+            "gfm",
+            "--wrap=none",
+            "-o",
+            str(output),
+            str(path),
+        ]
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=EXPORT_TIMEOUT)
         except subprocess.TimeoutExpired as error:

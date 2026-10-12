@@ -69,14 +69,8 @@ def _find_libreoffice() -> list[str] | None:
     return None
 
 
-def _render_office_to_pngs(
-    cmd_prefix: list[str],
-    pptx_path: str,
-    output_dir: str,
-    dpi: int,
-    timeout: int = 120,
-) -> list[str]:
-    """Convert an Office file (PPTX or DOCX) → PDF via LibreOffice headless, then rasterize with pymupdf."""
+def _office_to_pdf(cmd_prefix: list[str], source: str, output_dir: str, timeout: int = 120) -> str:
+    """Convert an Office file (PPTX, DOCX, ODT, ...) to `<output_dir>/<name>.pdf` with LibreOffice headless."""
     with tempfile.TemporaryDirectory(prefix="crepe_lo_") as profile_dir:
         # -env:UserInstallation isolates this invocation from any running LibreOffice instance or leftover lock
         cmd = cmd_prefix + [
@@ -86,20 +80,31 @@ def _render_office_to_pngs(
             "pdf",
             "--outdir",
             output_dir,
-            pptx_path,
+            source,
         ]
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
         except subprocess.TimeoutExpired as exc:
-            raise RuntimeError(f"LibreOffice timed out converting {os.path.basename(pptx_path)!r} to PDF") from exc
+            raise RuntimeError(f"LibreOffice timed out converting {os.path.basename(source)!r} to PDF") from exc
         if result.returncode != 0:
             raise RuntimeError(f"LibreOffice failed to convert document to PDF:\n{result.stderr.strip()}")
 
-    base = os.path.splitext(os.path.basename(pptx_path))[0]
+    base = os.path.splitext(os.path.basename(source))[0]
     pdf_path = os.path.join(output_dir, base + ".pdf")
     if not os.path.isfile(pdf_path):
         raise RuntimeError(f"LibreOffice did not produce the expected PDF: {pdf_path!r}")
+    return pdf_path
 
+
+def _render_office_to_pngs(
+    cmd_prefix: list[str],
+    pptx_path: str,
+    output_dir: str,
+    dpi: int,
+    timeout: int = 120,
+) -> list[str]:
+    """Convert an Office file (PPTX or DOCX) → PDF via LibreOffice headless, then rasterize with pymupdf."""
+    pdf_path = _office_to_pdf(cmd_prefix, pptx_path, output_dir, timeout)
     try:
         return render_pdf_to_pngs(pdf_path, output_dir, dpi=dpi)
     finally:
@@ -108,6 +113,7 @@ def _render_office_to_pngs(
 
 # Public aliases — use these in preference to private names.
 render_via_libreoffice = _render_office_to_pngs
+office_to_pdf = _office_to_pdf
 find_libreoffice = _find_libreoffice
 
 

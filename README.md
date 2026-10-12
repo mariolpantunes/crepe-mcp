@@ -159,12 +159,13 @@ Inspection, deep linting, and export for `.drawio` diagram files.
 - **Validation**: `inspect_drawio` (metadata and page structure), `lint_drawio` (validates cell hierarchy, decompresses XML, checks base IDs).
 - **Export**: `export_drawio` (headless rasterization to transparent high-DPI PNG, SVG, or PDF).
 
-### 6. Reader (`crepe-reader` — 8 tools)
+### 6. Reader (`crepe-reader` — 9 tools)
 Reads existing documents without any model, so an agent can work on a long file in small pieces. A file is read once into a store of pages, sections, paragraphs and numbered items (cached under the system temp folder, `CREPE_SCRATCH_BASE`); each tool returns a piece of it. The first read of a long PDF takes seconds; pages with tables are analysed in worker processes, and later calls are instant.
 - **Orientation**: `open_document` (title, parts of a PDF bundle, outline with pages, counts of figures, tables, equations).
-- **Reading**: `read_pages` (about 12,000 characters per call, with a continuation cursor), `read_section` (by outline heading), `search_document`.
+- **Reading**: `read_pages` (about 12,000 characters per call, with a continuation cursor), `read_section` (by outline heading, with a cursor for long sections), `search_document`.
 - **Numbered items**: `list_assets` and `get_asset` return figures, tables (as Markdown), equations (text and TeX), algorithms, listings and references, with the sentences that cite them.
-- **Output**: `render_page_png` (a PDF page as an image) and `document_to_markdown` (the whole document as an editable `.md`).
+- **Review marks**: `list_changes` lists the tracked insertions, deletions and comments of a DOCX (author, date, text, the text a comment is attached to, section); the other tools show its accepted view.
+- **Output**: `render_page_image` (a page of a PDF, DOCX, ODT, RTF or PPTX as a PNG or JPEG; Office files need LibreOffice) and `document_to_markdown` (the whole document as an editable `.md`).
 - **Formats**: PDF through PyMuPDF (layout rules relative to each document's own type sizes); DOCX, ODT, RTF, EPUB, HTML, LaTeX, reStructuredText, Markdown, Org, Jupyter, PPTX, XLSX and CSV through pandoc's AST. Formats without pages are cut into logical pages of about 3,500 characters. `CREPE_READER_ROOTS` can restrict the readable folders.
 
 ---
@@ -325,6 +326,15 @@ pre-commit install                                   # hooks mirror CI
 ---
 
 ## Release notes
+
+### 0.3.1
+
+- **`render_page_png` is now `render_page_image`** (`crepe-reader`, a rename: update any prompt or script that names the old tool). It takes `format` (`png`, the default, or `jpeg`) and renders pages of DOCX, ODT, RTF and PPTX as well as PDF; Office files are laid out by LibreOffice and the converted PDF is cached, so later pages are instant.
+- **New `list_changes` tool** (`crepe-reader`, 9 tools now): tracked insertions, deletions and comments of a DOCX with author, date, the text a comment is attached to and the section.
+- **Reader fixes**: a document with repeated caption numbers (a restarted appendix) no longer fails to open (the repeats become `table:1-2`, `table:1-3`); pandoc runs with `--sandbox`, so a LaTeX `\input` cannot pull in a local file or step outside `CREPE_READER_ROOTS`; `document_to_markdown` refuses to replace its source or an existing file unless `overwrite=true`; `read_section` continues long sections and oversized paragraphs with a cursor instead of cutting them silently.
+- **Worker pools are safer**: a worker with unreadable output loses only its own pages (the parent computes them), and all geometry and render workers share one deadline instead of one timeout each.
+- **One `.env` loader**: the second loader from the macOS merge (`crepe_mcp._env`, run at import) is removed; `crepe_mcp.config` is the only one. Semantic Scholar requests are paced and retried with backoff, and Playwright profiles are found under the system temp folder (macOS).
+- **Packaging and tooling**: the sdist carries `setup.py` and `skills/`; `ruff format --check` joins the pre-commit and CI gate; `crepe_mcp.__version__` now follows the package version, with a test; `dg.py --help` exits 0.
 
 ### 0.3.0 (breaking)
 
