@@ -31,6 +31,7 @@ MENTION_RES = {
     "listing": re.compile(r"\blisting\s*(\d+)", re.IGNORECASE),
 }
 LABELS = {"figure": "Figure", "table": "Table", "equation": "Equation", "listing": "Listing"}
+NESTED_BLOCKS = ("BulletList", "OrderedList", "Table", "Figure", "CodeBlock")  # blocks a list item hands on
 
 
 @cache
@@ -281,11 +282,14 @@ class _Walker:
             self.block(node)
 
     def list_item(self, item: list[dict[str, Any]]) -> None:
-        text = blocks_text(item)
+        """One paragraph for the item's own text; nested lists, tables, figures and code are walked as blocks of
+        their own, so their text is stored once and is not repeated in the parent item."""
+        own = [node for node in item if node["t"] not in NESTED_BLOCKS]
+        text = blocks_text(own)
         if text:
             self.add("text", "- " + text)
         for node in item:
-            if node["t"] in ("BulletList", "OrderedList", "Table", "Figure", "CodeBlock"):
+            if node["t"] in NESTED_BLOCKS:
                 self.block(node)
 
     def paragraph(self, inlines: list[dict[str, Any]]) -> None:

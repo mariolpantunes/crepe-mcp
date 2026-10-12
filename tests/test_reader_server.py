@@ -321,6 +321,21 @@ class TestPandocFormats(ReaderTestCase):
         with self.assertRaises(ToolError):
             call("read_section", path=str(path), heading="Big", cursor="garbage")
 
+    def test_nested_list_items_are_read_once(self):
+        path = self.tmp_path / "nested.md"
+        path.write_text(
+            "# Lists\n\n- first item\n  - nested one\n  - nested two\n- second item\n\n"
+            '  ```python\n  print("only once")\n  ```\n',
+            encoding="utf-8",
+        )
+        text = data("read_pages", path=str(path))
+        self.assertEqual(text.count("nested one"), 1)
+        self.assertEqual(text.count("nested two"), 1)
+        self.assertEqual(text.count("only once"), 1)
+        self.assertEqual(data("search_document", path=str(path), query="nested")["total_hits"], 2)
+        self.assertIn("- first item", text)
+        self.assertEqual(len(data("list_assets", path=str(path), kind="listing")["items"]), 1)
+
     def test_unsupported_formats_have_no_page_image(self):
         with self.assertRaises(ToolError) as caught:
             call("render_page_image", path=str(self.files["md"]), page=1)
