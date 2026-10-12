@@ -401,6 +401,7 @@ class TestInputChecks(ReaderTestCase):
         with mock.patch.dict(os.environ, {"CREPE_READER_ROOTS": str(self.tmp_path)}):
             self.assertEqual(data("open_document", path=str(pdf))["pages"], 17)
 
+    @unittest.skipUnless(shutil.which("pandoc"), "pandoc is required")
     def test_unknown_item_and_heading(self):
         path = self.tmp_path / "s.md"
         path.write_text(SAMPLE, encoding="utf-8")

@@ -43,8 +43,12 @@ jobs:
           pdoc --math -d google -o docs_build crepe_mcp \
             --logo "assets/logo.svg" \
             --favicon "assets/logo.svg"
+          # pdoc writes the logo path as given, relative to each page: every folder that has pages
+          # (crepe_mcp/, crepe_mcp/reader/, ...) needs its own assets/logo.svg
           cp -r assets docs_build/assets
-          cp -r assets docs_build/crepe_mcp/assets
+          find docs_build -name '*.html' -printf '%h\n' | sort -u | while read -r dir; do
+            [ -e "$dir/assets" ] || cp -r assets "$dir/assets"
+          done
           touch docs_build/.nojekyll
 
       - name: Every page must resolve its logo
