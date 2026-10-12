@@ -32,57 +32,78 @@ def _span(node: Any) -> tuple[str, dict[str, str], list[Any]] | None:
     return (classes[0] if classes else ""), dict(pairs), inlines
 
 
-def _anchors(siblings: list[Any]) -> dict[str, str]:
-    """For each comment-start among sibling inlines, the text up to the matching comment-end."""
-    starts: dict[str, int] = {}
-    found: dict[str, str] = {}
-    for index, node in enumerate(siblings):
-        span = _span(node)
-        if span is None:
-            continue
-        name, attrs, _ = span
-        if name == "comment-start":
-            starts[attrs.get("id", "")] = index
-        elif name == "comment-end" and attrs.get("id", "") in starts:
-            begin = starts.pop(attrs.get("id", ""))
-            found[attrs.get("id", "")] = text_of(siblings[begin + 1 : index])
-    return found
+LEAVES = ("Str", "Space", "SoftBreak", "LineBreak", "Code", "Math")
+BLOCKS = ("Para", "Plain", "Header", "CodeBlock", "LineBlock")
 
 
 def collect(ast: dict[str, Any]) -> list[dict[str, str]]:
-    """Every insertion, deletion and comment of a pandoc AST (read with track changes kept), in document order."""
+    """Every insertion, deletion and comment of a pandoc AST (read with track changes kept), in document order.
+
+    A comment's anchor is the document text between its start and end marker, across inline and paragraph
+    boundaries; the text of a comment inside it belongs to that comment only.
+    """
     marks: list[dict[str, str]] = []
     heading = [""]
-    anchors: dict[str, str] = {}
+    open_comments: dict[str, tuple[dict[str, str], list[str]]] = {}
+
+    def emit(text: str) -> None:
+        for _, parts in open_comments.values():
+            parts.append(text)
+
+    def finish(ident: str) -> None:
+        mark, parts = open_comments.pop(ident)
+        mark["anchor"] = _clip("".join(parts))
 
     def walk(node: Any) -> None:
         if isinstance(node, list):
-            anchors.update(_anchors(node))
             for item in node:
                 walk(item)
             return
         if not isinstance(node, dict):
             return
         kind, content = node.get("t"), node.get("c")
+        if kind in BLOCKS:
+            emit(" ")
         if kind == "Header" and content:
             heading[0] = _clip(text_of(content[2]))
+        if kind in LEAVES:
+            emit(text_of([node]))
+            return
         span = _span(node)
-        if span is not None and span[0] in ("insertion", "deletion", "comment-start"):
+        if span is not None:
             name, attrs, inlines = span
-            mark = {
-                "kind": "comment" if name == "comment-start" else name,
-                "author": attrs.get("author", ""),
-                "date": attrs.get("date", ""),
-                "text": _clip(text_of(inlines)),
-                "section": heading[0],
-            }
             if name == "comment-start":
-                mark["anchor"] = _clip(anchors.get(attrs.get("id", ""), ""))
-            marks.append(mark)
+                mark = {
+                    "kind": "comment",
+                    "author": attrs.get("author", ""),
+                    "date": attrs.get("date", ""),
+                    "text": _clip(text_of(inlines)),
+                    "section": heading[0],
+                    "anchor": "",
+                }
+                marks.append(mark)
+                open_comments[attrs.get("id", "")] = (mark, [])
+                return
+            if name == "comment-end":
+                if attrs.get("id", "") in open_comments:
+                    finish(attrs.get("id", ""))
+                return
+            if name in ("insertion", "deletion"):
+                marks.append(
+                    {
+                        "kind": name,
+                        "author": attrs.get("author", ""),
+                        "date": attrs.get("date", ""),
+                        "text": _clip(text_of(inlines)),
+                        "section": heading[0],
+                    }
+                )
         if content is not None:
             walk(content)
 
     walk(ast.get("blocks", []))
+    for ident in list(open_comments):
+        finish(ident)
     return marks
 
 
