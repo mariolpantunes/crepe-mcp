@@ -336,6 +336,25 @@ class TestPandocFormats(ReaderTestCase):
         self.assertIn("- first item", text)
         self.assertEqual(len(data("list_assets", path=str(path), kind="listing")["items"]), 1)
 
+    def test_a_lone_heading_never_leaves_an_empty_page(self):
+        path = self.tmp_path / "lone.md"
+        path.write_text("# Title\n\n" + "word " * 900 + "\n", encoding="utf-8")
+        info = data("open_document", path=str(path))
+        self.assertEqual(info["pages"], 1)
+        text = data("read_pages", path=str(path))
+        self.assertNotIn("[blank page]", text)
+        self.assertIn("Title", text)
+
+    def test_a_heading_moves_with_its_block_to_the_next_page(self):
+        path = self.tmp_path / "moves.md"
+        path.write_text("# A\n\n" + "alpha " * 500 + "\n\n## Heading B\n\n" + "beta " * 300 + "\n", encoding="utf-8")
+        self.assertEqual(data("open_document", path=str(path))["pages"], 2)
+        first = data("read_pages", path=str(path), first_page=1, last_page=1)
+        second = data("read_pages", path=str(path), first_page=2, last_page=2)
+        self.assertNotIn("Heading B", first)
+        self.assertIn("Heading B", second)
+        self.assertIn("beta", second)
+
     def test_unsupported_formats_have_no_page_image(self):
         with self.assertRaises(ToolError) as caught:
             call("render_page_image", path=str(self.files["md"]), page=1)

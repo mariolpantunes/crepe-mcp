@@ -346,19 +346,25 @@ class _Walker:
 
 
 def _paginate(paragraphs: list[_Para]) -> int:
-    """Assign logical pages: whole blocks, a heading stays with the block after it. Returns the page count."""
-    page, used = 1, 0
+    """Assign logical pages: whole blocks, a heading stays with the block after it. Returns the page count.
+
+    A page that holds nothing but a heading is not closed: the block after it joins it (a page may then exceed
+    PAGE_CHARS), so no page is left empty or with a heading alone.
+    """
+    page, used, on_page = 1, 0, 0
     previous: _Para | None = None
     for para in paragraphs:
         size = len(para.text) + 2
-        if used and used + size > PAGE_CHARS:
+        heading_alone = on_page == 1 and previous is not None and previous.kind == "heading"
+        if used and used + size > PAGE_CHARS and not heading_alone:
             page += 1
-            used = 0
+            used, on_page = 0, 0
             if previous is not None and previous.kind == "heading" and previous.page == page - 1:
                 previous.page = page
-                used = len(previous.text) + 2
+                used, on_page = len(previous.text) + 2, 1
         para.page = page
         used += size
+        on_page += 1
         previous = para
     return page
 
