@@ -1,4 +1,5 @@
 """Converts compiled document artifacts (PDF or DOCX) to PNG sequences for visual validation."""
+
 from __future__ import annotations
 
 import os

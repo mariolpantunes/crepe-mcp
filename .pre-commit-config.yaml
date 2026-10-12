@@ -67,6 +67,13 @@ repos:
         files: '(\.py$|^pyproject\.toml$)'
         pass_filenames: false
 
+      - id: ruff-format
+        name: ruff format --check
+        entry: ruff format --check .
+        language: system
+        files: '(\.py$|^pyproject\.toml$)'
+        pass_filenames: false
+
       - id: basedpyright
         name: basedpyright
         entry: basedpyright

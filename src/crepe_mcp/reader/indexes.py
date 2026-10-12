@@ -183,8 +183,9 @@ def _crowded(lines: list[Line], tolerance: float, spacing: float) -> set[int]:
     return crowded
 
 
-def is_caption(line: Line, metrics: Metrics, opens_paragraph: bool = False,
-               in_caption: bool = False, in_table: bool = False) -> bool:
+def is_caption(
+    line: Line, metrics: Metrics, opens_paragraph: bool = False, in_caption: bool = False, in_table: bool = False
+) -> bool:
     """A caption is a figure/table/algorithm label, a separator and the caption text: 'Fig. 1. Evolution ...',
     'Table 4: Benchmark datasets'. A label alone on its line is a caption too -- its text is the line below
     ('Table 1' / 'Summary of ...') -- when it opens a paragraph or breaks the caption it follows, since a caption
@@ -193,7 +194,7 @@ def is_caption(line: Line, metrics: Metrics, opens_paragraph: bool = False,
     match = CAPTION_RE.match(line.text)
     if not match:
         return False
-    rest = line.text[match.end():]
+    rest = line.text[match.end() :]
     if not rest.strip():
         return opens_paragraph or in_caption
     if CAPTION_SEPARATOR_RE.match(rest):
@@ -229,8 +230,12 @@ def _candidate(
         return None
     if MATH_FONT_RE.match(first.font) and _family(first.font) != _family(metrics.body_font):
         return None
-    set_apart = (first.font != metrics.body_font or first.bold or not metrics.same_size(first.size, metrics.body_size)
-                 or title_text.isupper())
+    set_apart = (
+        first.font != metrics.body_font
+        or first.bold
+        or not metrics.same_size(first.size, metrics.body_size)
+        or title_text.isupper()
+    )
     fills = last.x1 >= column_edge - INDENT * metrics.body_size
     numbered = NUMBERED_RE.match(text)
     sub_level = numbered is not None and "." in (numbered.group("decimal") or "")
@@ -312,8 +317,9 @@ def _page_cells(page: Page, metrics: Metrics, starts: dict[int, float]) -> set[i
         if line.id not in crowded:
             continue
         low, high = starts.get(line.column, 0.0) - margin, edges.get(line.column, page.width) + margin
-        if any(low <= mate.x0 and mate.x1 <= high and re.search(r"[^\W\d_]", mate.text)
-               for mate in rows.mates(line, row)):
+        if any(
+            low <= mate.x0 and mate.x1 <= high and re.search(r"[^\W\d_]", mate.text) for mate in rows.mates(line, row)
+        ):
             cells.add(line.id)
     for column_lines in by_column.values():
         ordered = sorted(column_lines, key=lambda line: (line.y0, line.x0))
@@ -323,8 +329,13 @@ def _page_cells(page: Page, metrics: Metrics, starts: dict[int, float]) -> set[i
             for above in reversed(ordered[:index]):
                 if above.y1 < line.y0 - gap_limit:
                     break
-                if (above.id in cells and metrics.same_size(above.size, line.size)
-                        and line.x0 < above.x1 and above.x0 < line.x1 and above.y0 < line.y0):
+                if (
+                    above.id in cells
+                    and metrics.same_size(above.size, line.size)
+                    and line.x0 < above.x1
+                    and above.x0 < line.x1
+                    and above.y0 < line.y0
+                ):
                     cells.add(line.id)
                     break
     return cells
@@ -358,8 +369,13 @@ def _candidates(pages: list[Page], metrics: Metrics) -> list[_Candidate]:
             edge = edges.get(line.column, page.width)
             options: list[tuple[Line | None, int]] = []
             following = body[index + 1] if index + 1 < len(body) else None
-            if (SECTION_NUMBER_RE.match(text) and following is not None and following.column == line.column
-                    and following.x0 >= line.x1 and abs(_centre(following) - _centre(line)) <= row):
+            if (
+                SECTION_NUMBER_RE.match(text)
+                and following is not None
+                and following.column == line.column
+                and following.x0 >= line.x1
+                and abs(_centre(following) - _centre(line)) <= row
+            ):
                 options.append((line, index + 1))
             options.append((None, index))
             for number, start in options:
@@ -367,8 +383,11 @@ def _candidates(pages: list[Page], metrics: Metrics) -> list[_Candidate]:
                 while start + len(titles) < len(body):
                     # a title continues in the same typography: more text on its row, or a wrapped next line
                     last, after = titles[-1], body[start + len(titles)]
-                    if not (after.column == last.column and _style(after) == _style(last)
-                            and metrics.same_size(after.size, last.size)):
+                    if not (
+                        after.column == last.column
+                        and _style(after) == _style(last)
+                        and metrics.same_size(after.size, last.size)
+                    ):
                         break
                     same_row = abs(_centre(after) - _centre(last)) <= row and after.x0 >= last.x1
                     wraps = last.text.rstrip().endswith("-") or last.x1 >= edge - INDENT * metrics.body_size
@@ -423,8 +442,11 @@ class _RowIndex:
         slack = 1e-6  # the window is widened and the exact test below decides, so float rounding cannot matter
         low = bisect_left(centres, centre - tolerance - slack)
         high = bisect_right(centres, centre + tolerance + slack)
-        return [other for other in self._lines[line.column][low:high]
-                if other.id != line.id and abs(_centre(other) - centre) <= tolerance]
+        return [
+            other
+            for other in self._lines[line.column][low:high]
+            if other.id != line.id and abs(_centre(other) - centre) <= tolerance
+        ]
 
 
 def _headings(candidates: list[_Candidate]) -> list[_Candidate]:
@@ -439,9 +461,14 @@ def _headings(candidates: list[_Candidate]) -> list[_Candidate]:
     """
     listed: set[int] = set()
     for before, after in zip(candidates, candidates[1:], strict=False):
-        if (before.readings and after.readings and before.page == after.page
-                and after.first_index == before.last_index + 1 and before.style == after.style
-                and {r.scheme for r in before.readings} & {r.scheme for r in after.readings}):
+        if (
+            before.readings
+            and after.readings
+            and before.page == after.page
+            and after.first_index == before.last_index + 1
+            and before.style == after.style
+            and {r.scheme for r in before.readings} & {r.scheme for r in after.readings}
+        ):
             listed.update((id(before), id(after)))
     numbered = [c for c in candidates if c.readings and id(c) not in listed]
 
@@ -456,8 +483,11 @@ def _headings(candidates: list[_Candidate]) -> list[_Candidate]:
         if candidate.fills:
             continue
         reading, run = next(
-            ((r, latest[run_key(r, candidate.style)]) for r in candidate.readings
-             if run_key(r, candidate.style) in latest and latest[run_key(r, candidate.style)].last + 1 == r.value),
+            (
+                (r, latest[run_key(r, candidate.style)])
+                for r in candidate.readings
+                if run_key(r, candidate.style) in latest and latest[run_key(r, candidate.style)].last + 1 == r.value
+            ),
             (next((r for r in candidate.readings if r.value == 1), candidate.readings[0]), None),
         )
         if run is None:
@@ -477,8 +507,11 @@ def _headings(candidates: list[_Candidate]) -> list[_Candidate]:
         if any(member.plain for member in run.members):
             valid = run.first == 1 and len(run.members) >= 2  # headings in body type need a full run of their own
         else:
-            valid = ((run.first == 1 and len(run.members) >= 2) or len(run.members) >= NUMBERING_RUN
-                     or (run.first > 1 and before is not None and run.first > before.last))
+            valid = (
+                (run.first == 1 and len(run.members) >= 2)
+                or len(run.members) >= NUMBERING_RUN
+                or (run.first > 1 and before is not None and run.first > before.last)
+            )
         if valid:
             accepted_runs.append(run)
             resumable[key] = run
@@ -490,16 +523,24 @@ def _headings(candidates: list[_Candidate]) -> list[_Candidate]:
         main = min(top_level, key=lambda run: order[id(run.members[0])])
         low, high = order[id(main.members[0])], order[id(main.members[-1])]
         accepted_runs = [
-            run for run in accepted_runs
-            if run is main or run not in top_level or run.scheme[0] == main.scheme[0]
+            run
+            for run in accepted_runs
+            if run is main
+            or run not in top_level
+            or run.scheme[0] == main.scheme[0]
             or not all(low < order[id(member)] < high for member in run.members)
         ]
     accepted = {id(member) for run in accepted_runs for member in run.members}
     for run in runs:
         lone = run.members[0]
-        if len(run.members) == 1 and run.first == 1 and not lone.plain and (
-            UNNUMBERED_RE.match(lone.title)
-            or any(a.scheme[0] == run.scheme[0] and a.members[0].style == lone.style for a in accepted_runs)
+        if (
+            len(run.members) == 1
+            and run.first == 1
+            and not lone.plain
+            and (
+                UNNUMBERED_RE.match(lone.title)
+                or any(a.scheme[0] == run.scheme[0] and a.members[0].style == lone.style for a in accepted_runs)
+            )
         ):  # a lone heading is set exactly like an accepted run, italic included
             accepted.add(id(lone))
 
@@ -507,13 +548,24 @@ def _headings(candidates: list[_Candidate]) -> list[_Candidate]:
         if not candidate.fills:
             continue
         for reading in candidate.readings:
-            members = sorted((m for a in accepted_runs
-                              if a.scheme == reading.scheme and a.style == run_key(reading, candidate.style)[1]
-                              for m in a.members), key=lambda m: order[id(m)])
+            members = sorted(
+                (
+                    m
+                    for a in accepted_runs
+                    if a.scheme == reading.scheme and a.style == run_key(reading, candidate.style)[1]
+                    for m in a.members
+                ),
+                key=lambda m: order[id(m)],
+            )
             before = [m for m in members if order[id(m)] < order[id(candidate)]]
             after = [m for m in members if order[id(m)] > order[id(candidate)]]
-            if (before and after and before[-1].reading is not None and after[0].reading is not None
-                    and before[-1].reading.value + 1 == reading.value == after[0].reading.value - 1):
+            if (
+                before
+                and after
+                and before[-1].reading is not None
+                and after[0].reading is not None
+                and before[-1].reading.value + 1 == reading.value == after[0].reading.value - 1
+            ):
                 candidate.reading = reading
                 accepted.add(id(candidate))
                 break
@@ -558,10 +610,12 @@ def build_indexes(pages: list[Page], metrics: Metrics) -> tuple[list[Paragraph],
                     stack.pop()
                 section_id = len(sections) + 1
                 last = heading.lines[-1]
-                paragraph = Paragraph(len(paragraphs) + 1, line.page, last.page, "heading", section_id,
-                                      line.id, last.id, heading.text)
-                section = Section(section_id, stack[-1].id if stack else 0, level, number, heading.title, line.page,
-                                  paragraph.id)
+                paragraph = Paragraph(
+                    len(paragraphs) + 1, line.page, last.page, "heading", section_id, line.id, last.id, heading.text
+                )
+                section = Section(
+                    section_id, stack[-1].id if stack else 0, level, number, heading.title, line.page, paragraph.id
+                )
                 paragraphs.append(paragraph)
                 sections.append(section)
                 stack.append(section)
@@ -574,13 +628,17 @@ def build_indexes(pages: list[Page], metrics: Metrics) -> tuple[list[Paragraph],
 
             reference_start = after_references and REFERENCE_START_RE.match(line.text) is not None
             opens = (
-                previous is None or line.page != previous.page or line.column != previous.column
-                or SENTENCE_END_RE.search(previous.text) is not None or line.y0 - previous.y1 > gap_limit
+                previous is None
+                or line.page != previous.page
+                or line.column != previous.column
+                or SENTENCE_END_RE.search(previous.text) is not None
+                or line.y0 - previous.y1 > gap_limit
                 or EQUATION_TAG_RE.match(previous.text) is not None
             )
             # numbered items carry on past the References: floats set at the end, and appendices
             caption = is_caption(
-                line, metrics, opens, current is not None and current.kind == "caption", line.id in cells)
+                line, metrics, opens, current is not None and current.kind == "caption", line.id in cells
+            )
             if current is not None and previous is not None and not reference_start:
                 same_flow = line.page == previous.page and line.column == previous.column
                 gap = line.y0 - previous.y1 if same_flow else 0.0
@@ -614,8 +672,16 @@ def build_indexes(pages: list[Page], metrics: Metrics) -> tuple[list[Paragraph],
                     continue
 
             kind = "reference" if reference_start else ("caption" if caption else "text")
-            current = Paragraph(len(paragraphs) + 1, line.page, line.page, kind,
-                                stack[-1].id if stack else 0, line.id, line.id, line.text)
+            current = Paragraph(
+                len(paragraphs) + 1,
+                line.page,
+                line.page,
+                kind,
+                stack[-1].id if stack else 0,
+                line.id,
+                line.id,
+                line.text,
+            )
             paragraphs.append(current)
             previous = line
     return paragraphs, sections

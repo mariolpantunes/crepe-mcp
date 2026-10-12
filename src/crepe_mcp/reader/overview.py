@@ -73,8 +73,12 @@ def overview(store: DocumentStore, path: Path) -> dict[str, Any]:
         first, last = part_range(store, "manuscript")
         chosen = store.manuscript_pages()
         reply["parts"] = [
-            {"kind": s["kind"], "pages": page_span(s["first_page"], s["last_page"]), **({"label": s["label"]}
-             if s["label"] else {}), "evidence": s["evidence"][:EVIDENCE_ITEMS]}
+            {
+                "kind": s["kind"],
+                "pages": page_span(s["first_page"], s["last_page"]),
+                **({"label": s["label"]} if s["label"] else {}),
+                "evidence": s["evidence"][:EVIDENCE_ITEMS],
+            }
             for s in segments
         ]
         reply["manuscript"] = {"pages": page_span(first, last), "source": chosen["source"]}

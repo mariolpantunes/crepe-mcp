@@ -20,6 +20,7 @@ Group F (1):
 Environment variables (all CREPE_ prefixed):
   CREPE_LIBREOFFICE_PATH — path to soffice/libreoffice (for PPTX → PNG rendering)
 """
+
 from __future__ import annotations
 
 import os
@@ -111,6 +112,7 @@ def academic_presentation_prompt(
         "5. Compile to PDF with compile_presentation(output_format='pdf') and verify with render_slides_as_pngs()."
     )
 
+
 @mcp.tool
 def create_presentation(
     title: str,
@@ -123,8 +125,11 @@ def create_presentation(
     every other Group-A tool. All title-slide metadata is set here: title,
     optional subtitle, author, institute, date."""
     pres = new_presentation(
-        title=title, subtitle=subtitle, author=author,
-        institute=institute, date=date,
+        title=title,
+        subtitle=subtitle,
+        author=author,
+        institute=institute,
+        date=date,
     )
     return {"presentation_id": pres.id, "metadata": vars(pres.metadata)}
 
@@ -314,7 +319,6 @@ def duplicate_presentation(
     }
 
 
-
 @mcp.tool
 def update_presentation_metadata(
     presentation_id: str,
@@ -329,8 +333,12 @@ def update_presentation_metadata(
     try:
         pres = _get_pres(presentation_id)
         metadata = _update_metadata(
-            pres, title=title, subtitle=subtitle,
-            author=author, institute=institute, date=date,
+            pres,
+            title=title,
+            subtitle=subtitle,
+            author=author,
+            institute=institute,
+            date=date,
         )
     except ValueError as exc:
         return {"success": False, "error": str(exc)}
@@ -348,12 +356,14 @@ def list_presentations() -> dict:
     presentations = []
     for pres in _list_pres():
         with pres.lock:
-            presentations.append({
-                "presentation_id": pres.id,
-                "title": pres.metadata.title,
-                "slide_count": len(pres.slides),
-                "artifacts": list(pres.artifacts.keys()),
-            })
+            presentations.append(
+                {
+                    "presentation_id": pres.id,
+                    "title": pres.metadata.title,
+                    "slide_count": len(pres.slides),
+                    "artifacts": list(pres.artifacts.keys()),
+                }
+            )
     return {"presentations": presentations}
 
 
@@ -479,8 +489,9 @@ def compile_presentation(
         if output_format == "pdf":
             compile_to_pdf(pres, output_path, theme=theme, highlight_style=highlight_style)
         else:
-            compile_to_pptx(pres, output_path, reference_doc=reference_doc,
-                            theme=theme, highlight_style=highlight_style)
+            compile_to_pptx(
+                pres, output_path, reference_doc=reference_doc, theme=theme, highlight_style=highlight_style
+            )
     except CompileError as exc:
         return {"success": False, "error": str(exc)}
 
@@ -561,6 +572,8 @@ def cleanup_presentation(presentation_id: str) -> dict:
     except ValueError as exc:
         return {"success": False, "error": str(exc)}
     return {"success": True, "presentation_id": presentation_id}
+
+
 @mcp.tool
 def lint_presentation(
     presentation_id: str,
@@ -582,6 +595,7 @@ def lint_presentation(
     result["presentation_id"] = presentation_id
     result["slide_count"] = len(pres.slides)
     return result
+
 
 def main() -> None:
     """Console-script entrypoint for the standalone crepe-presentations server."""

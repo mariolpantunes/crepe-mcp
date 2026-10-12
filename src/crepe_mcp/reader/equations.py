@@ -33,8 +33,36 @@ SPACE = 0.2  # a horizontal gap wider than this between two items is a space
 _SMALL = ["(", ")", "[", "]", "⌊", "⌋", "⌈", "⌉", "{", "}", "⟨", "⟩", "|", "‖", "/", "\\"]
 _BIG = ["(", ")", "(", ")", "[", "]", "⌊", "⌋", "⌈", "⌉", "{", "}", "⟨", "⟩", "/", "\\"]
 _BIGGER = ["(", ")", "[", "]", "⌊", "⌋", "⌈", "⌉", "{", "}", "⟨", "⟩", "/", "\\", "/", "\\"]
-_OPERATORS = ["⨆", "⨆", "∮", "∮", "⨀", "⨀", "⨁", "⨁", "⨂", "⨂", "∑", "∏", "∫", "⋃", "⋂", "⨄", "⋀", "⋁",
-              "∑", "∏", "∫", "⋃", "⋂", "⨄", "⋀", "⋁", "∐", "∐"]
+_OPERATORS = [
+    "⨆",
+    "⨆",
+    "∮",
+    "∮",
+    "⨀",
+    "⨀",
+    "⨁",
+    "⨁",
+    "⨂",
+    "⨂",
+    "∑",
+    "∏",
+    "∫",
+    "⋃",
+    "⋂",
+    "⨄",
+    "⋀",
+    "⋁",
+    "∑",
+    "∏",
+    "∫",
+    "⋃",
+    "⋂",
+    "⨄",
+    "⋀",
+    "⋁",
+    "∐",
+    "∐",
+]
 TEX_EXTENSION = {
     **{chr(slot): glyph for slot, glyph in enumerate(_SMALL)},
     **{chr(0x10 + slot): glyph for slot, glyph in enumerate(_BIG)},
@@ -77,8 +105,9 @@ class Node:
     spaced: bool = False  # printed with a space before it
 
 
-def glyphs_in(pdf_page: Any, rect: tuple[float, float, float, float], exclude: list[tuple[float, float, float, float]]
-              ) -> list[Glyph]:
+def glyphs_in(
+    pdf_page: Any, rect: tuple[float, float, float, float], exclude: list[tuple[float, float, float, float]]
+) -> list[Glyph]:
     """Characters whose centre lies in rect and in none of the excluded boxes (e.g. the equation number)."""
     found: list[Glyph] = []
     data: Any = pdf_page.get_text("rawdict", clip=fitz.Rect(rect))
@@ -104,8 +133,9 @@ def glyphs_in(pdf_page: Any, rect: tuple[float, float, float, float], exclude: l
                         text = DOUBLE_STRUCK.get(text, text)
                     if not text.isprintable():
                         continue
-                    found.append(Glyph(text, x0, y0, x1, y1, float(char["origin"][1]), float(span["size"]), italic,
-                                       large))
+                    found.append(
+                        Glyph(text, x0, y0, x1, y1, float(char["origin"][1]), float(span["size"]), italic, large)
+                    )
     return found
 
 
@@ -141,23 +171,31 @@ def _tokens(glyphs: list[Glyph], size: float) -> list[Node]:
         last = nodes[-1] if nodes else None
         adjacent = last is not None and last.kind == "token" and glyph.x0 - last.x1 <= 0.15 * size
         number = last is not None and last.role == "mn" and (glyph.text.isdigit() or glyph.text == ".")
-        word = (last is not None and last.role == "mi" and not last.italic and not glyph.italic
-                and last.text.isalpha() and glyph.text.isalpha())
+        word = (
+            last is not None
+            and last.role == "mi"
+            and not last.italic
+            and not glyph.italic
+            and last.text.isalpha()
+            and glyph.text.isalpha()
+        )
         if last is not None and adjacent and (number or word):
             last.text += glyph.text
             last.x1 = glyph.x1
             continue
-        nodes.append(Node("token", glyph.text, _role(glyph.text, glyph.italic), x0=glyph.x0, x1=glyph.x1,
-                          italic=glyph.italic))
+        nodes.append(
+            Node("token", glyph.text, _role(glyph.text, glyph.italic), x0=glyph.x0, x1=glyph.x1, italic=glyph.italic)
+        )
     return nodes
 
 
 def build_row(glyphs: list[Glyph], baseline: float, size: float) -> tuple[list[Node], list[Glyph]]:
     """The items of one row on the given baseline, and the characters that belong to no item of it."""
     band = [
-        g for g in glyphs
-        if g.size >= SMALL * size and (abs(g.base - baseline) <= BAND * size or (g.large and g.y0 <= baseline
-                                                                               and g.y1 >= baseline - size))
+        g
+        for g in glyphs
+        if g.size >= SMALL * size
+        and (abs(g.base - baseline) <= BAND * size or (g.large and g.y0 <= baseline and g.y1 >= baseline - size))
     ]
     small = [g for g in glyphs if g.size < SMALL * size]
     stacked = [g for g in glyphs if g.size >= SMALL * size and g not in band and abs(g.base - baseline) <= STACK * size]
@@ -171,14 +209,26 @@ def build_row(glyphs: list[Glyph], baseline: float, size: float) -> tuple[list[N
             reach = (token.x0 - 0.5 * size, token.x1 + 0.5 * size)
             top = min(g.y0 for g in band if token.x0 <= (g.x0 + g.x1) / 2 <= token.x1)
             bottom = max(g.y1 for g in band if token.x0 <= (g.x0 + g.x1) / 2 <= token.x1)
-            below = [g for g in small if id(g) not in claimed and g.y0 >= bottom - 0.2 * size
-                     and g.y0 - bottom <= STACK * size]
-            above = [g for g in small if id(g) not in claimed and g.y1 <= top + 0.2 * size
-                     and top - g.y1 <= STACK * size]
-            under = [g for part in _segments(below, 0.3 * size) if min(g.x0 for g in part) <= reach[1]
-                     and max(g.x1 for g in part) >= reach[0] for g in part]
-            over = [g for part in _segments(above, 0.3 * size) if min(g.x0 for g in part) <= reach[1]
-                    and max(g.x1 for g in part) >= reach[0] for g in part]
+            below = [
+                g
+                for g in small
+                if id(g) not in claimed and g.y0 >= bottom - 0.2 * size and g.y0 - bottom <= STACK * size
+            ]
+            above = [
+                g for g in small if id(g) not in claimed and g.y1 <= top + 0.2 * size and top - g.y1 <= STACK * size
+            ]
+            under = [
+                g
+                for part in _segments(below, 0.3 * size)
+                if min(g.x0 for g in part) <= reach[1] and max(g.x1 for g in part) >= reach[0]
+                for g in part
+            ]
+            over = [
+                g
+                for part in _segments(above, 0.3 * size)
+                if min(g.x0 for g in part) <= reach[1] and max(g.x1 for g in part) >= reach[0]
+                for g in part
+            ]
             if under or over:
                 parts = []
                 for part in (under, over):
@@ -195,13 +245,26 @@ def build_row(glyphs: list[Glyph], baseline: float, size: float) -> tuple[list[N
     below = _segments([g for g in stacked if g.base > baseline], SEGMENT_GAP * size)
     for top_part in above:
         left, right = min(g.x0 for g in top_part), max(g.x1 for g in top_part)
-        match = next((part for part in below if min(g.x0 for g in part) < right and max(g.x1 for g in part) > left
-                      and not any(id(g) in claimed for g in part)), None)
+        match = next(
+            (
+                part
+                for part in below
+                if min(g.x0 for g in part) < right
+                and max(g.x1 for g in part) > left
+                and not any(id(g) in claimed for g in part)
+            ),
+            None,
+        )
         if match is None or any(id(g) in claimed for g in top_part):
             continue
         extent = (min(left, min(g.x0 for g in match)), max(right, max(g.x1 for g in match)))
-        inside = [g for g in small if id(g) not in claimed and extent[0] - 0.2 * size <= g.x0 <= extent[1] + 0.2 * size
-                  and abs(g.base - baseline) <= STACK * size]
+        inside = [
+            g
+            for g in small
+            if id(g) not in claimed
+            and extent[0] - 0.2 * size <= g.x0 <= extent[1] + 0.2 * size
+            and abs(g.base - baseline) <= STACK * size
+        ]
         numerator = top_part + [g for g in inside if g.base < baseline - BAND * size]
         denominator = match + [g for g in inside if g.base > baseline + BAND * size]
         claimed.update(id(g) for g in numerator + denominator)
@@ -215,12 +278,15 @@ def build_row(glyphs: list[Glyph], baseline: float, size: float) -> tuple[list[N
     # accents decorate the letter they overlap
     for accent in [node for node in items if node.kind == "token" and node.text in ACCENTS]:
         centre = (accent.x0 + accent.x1) / 2
-        target = next((node for node in items if node is not accent and node.x0 - 0.1 * size <= centre
-                       <= node.x1 + 0.1 * size), None)
+        target = next(
+            (node for node in items if node is not accent and node.x0 - 0.1 * size <= centre <= node.x1 + 0.1 * size),
+            None,
+        )
         items.remove(accent)
         if target is not None:
-            items[items.index(target)] = Node("accent", ACCENTS[accent.text], children=[[target]], x0=target.x0,
-                                              x1=target.x1)
+            items[items.index(target)] = Node(
+                "accent", ACCENTS[accent.text], children=[[target]], x0=target.x0, x1=target.x1
+            )
 
     # scripts: remaining small characters attach to the item before them
     scripts = [g for g in small if id(g) not in claimed and abs(g.base - baseline) <= STACK * size]
@@ -333,8 +399,9 @@ def mathml(node: Node) -> str:
     return f"<munder>{_row(op)}{_row(under)}</munder>" if under else f"<mover>{_row(op)}{_row(over)}</mover>"
 
 
-def equation_text(pdf_page: Any, rect: tuple[float, float, float, float], number_box: tuple[float, float, float, float]
-                  ) -> tuple[str, str]:
+def equation_text(
+    pdf_page: Any, rect: tuple[float, float, float, float], number_box: tuple[float, float, float, float]
+) -> tuple[str, str]:
     """(content, confidence): linear text on the first line(s) and MathML on the last line."""
     glyphs = glyphs_in(pdf_page, rect, [number_box])
     number = [g for g in glyphs_in(pdf_page, number_box, []) if g.text.isdigit()]

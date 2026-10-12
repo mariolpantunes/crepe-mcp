@@ -3,6 +3,7 @@
 Documents hold metadata (paper_size, margins, font_size, toc, etc.) and a hierarchical
 tree of Chapters and Sections.
 """
+
 from __future__ import annotations
 
 import atexit
@@ -79,10 +80,17 @@ def new_document(
     doc_id = uuid.uuid4().hex[:8]
     workdir = tempfile.mkdtemp(prefix=f"crepe_doc_{doc_id}_")
     metadata = DocumentMetadata(
-        title=title, subtitle=subtitle, author=author,
-        institute=institute, date=date, abstract=abstract,
-        paper_size=paper_size, margin=margin, font_size=font_size,
-        toc=toc, number_sections=number_sections,
+        title=title,
+        subtitle=subtitle,
+        author=author,
+        institute=institute,
+        date=date,
+        abstract=abstract,
+        paper_size=paper_size,
+        margin=margin,
+        font_size=font_size,
+        toc=toc,
+        number_sections=number_sections,
     )
     doc = Document(id=doc_id, workdir=workdir, metadata=metadata)
     with _DOC_REGISTRY_LOCK:
@@ -124,6 +132,7 @@ atexit.register(_cleanup_all_doc_workdirs)
 # ---------------------------------------------------------------------------
 # Chapter and Section manipulation
 # ---------------------------------------------------------------------------
+
 
 def set_chapter(
     doc: Document,
@@ -211,9 +220,7 @@ def build_doc_config_yaml(doc: Document) -> str:
     if doc.metadata.number_sections:
         front["numbersections"] = True
 
-    return yaml.safe_dump(
-        front, sort_keys=False, allow_unicode=True, default_flow_style=False
-    ).strip()
+    return yaml.safe_dump(front, sort_keys=False, allow_unicode=True, default_flow_style=False).strip()
 
 
 def build_document_markdown(doc: Document) -> str:

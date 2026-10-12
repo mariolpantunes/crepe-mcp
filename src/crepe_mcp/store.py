@@ -35,6 +35,7 @@ under the same lock as the mutation, that fails loudly with a clear error
 the moment a call's assumption about the current slide count is stale --
 instead of silently landing somewhere the caller didn't intend.
 """
+
 from __future__ import annotations
 
 import atexit
@@ -84,6 +85,7 @@ _REGISTRY_LOCK = threading.Lock()
 # Factory helpers
 # ---------------------------------------------------------------------------
 
+
 def new_presentation(
     title: str = "",
     subtitle: str = "",
@@ -94,8 +96,11 @@ def new_presentation(
     presentation_id = uuid.uuid4().hex[:8]
     workdir = tempfile.mkdtemp(prefix=f"crepe_{presentation_id}_")
     metadata = Metadata(
-        title=title, subtitle=subtitle,
-        author=author, institute=institute, date=date,
+        title=title,
+        subtitle=subtitle,
+        author=author,
+        institute=institute,
+        date=date,
     )
     presentation = Presentation(id=presentation_id, workdir=workdir, metadata=metadata)
     with _REGISTRY_LOCK:
@@ -133,6 +138,7 @@ atexit.register(_cleanup_all_workdirs)
 # ---------------------------------------------------------------------------
 # Slide helpers
 # ---------------------------------------------------------------------------
+
 
 def _check_expected_count(presentation: Presentation, expected_slide_count: int | None) -> None:
     """Raise ValueError if expected_slide_count is given and stale.
@@ -189,14 +195,10 @@ def upsert_slide(
         return slide, "appended", len(presentation.slides) - 1, []
 
 
-
 def get_slide_by_index(presentation: Presentation, index: int) -> Slide:
     with presentation.lock:
         if index < 0 or index >= len(presentation.slides):
-            raise IndexError(
-                f"Slide index {index} out of range "
-                f"(presentation has {len(presentation.slides)} slides)"
-            )
+            raise IndexError(f"Slide index {index} out of range (presentation has {len(presentation.slides)} slides)")
         return presentation.slides[index]
 
 
@@ -213,10 +215,7 @@ def delete_slide(
     with presentation.lock:
         _check_expected_count(presentation, expected_slide_count)
         if index < 0 or index >= len(presentation.slides):
-            raise IndexError(
-                f"Slide index {index} out of range "
-                f"(presentation has {len(presentation.slides)} slides)"
-            )
+            raise IndexError(f"Slide index {index} out of range (presentation has {len(presentation.slides)} slides)")
         return presentation.slides.pop(index)
 
 
@@ -261,10 +260,7 @@ def replace_all_slides(
     Returns the new slide count, read inside the lock so callers get an
     accurate value without a second lock acquisition.
     """
-    new_slides = [
-        Slide(id=uuid.uuid4().hex[:8], title=title, content=content)
-        for title, content in parsed
-    ]
+    new_slides = [Slide(id=uuid.uuid4().hex[:8], title=title, content=content) for title, content in parsed]
     with presentation.lock:
         presentation.slides.clear()
         presentation.slides.extend(new_slides)

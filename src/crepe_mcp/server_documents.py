@@ -16,6 +16,7 @@ Group D (11):
 Group F (1):
   lint_document
 """
+
 from __future__ import annotations
 
 import os
@@ -73,6 +74,7 @@ def technical_report_prompt(
         "5. Compile with compile_document(output_format='pdf') and render PNGs with render_document_as_pngs()."
     )
 
+
 @mcp.tool
 def create_document(
     title: str = "Untitled Document",
@@ -89,9 +91,17 @@ def create_document(
 ) -> dict:
     """Create a new A4 document project (report/article/paper)."""
     doc = _doc_store.new_document(
-        title=title, subtitle=subtitle, author=author, institute=institute,
-        date=date, abstract=abstract, paper_size=paper_size, margin=margin,
-        font_size=font_size, toc=toc, number_sections=number_sections,
+        title=title,
+        subtitle=subtitle,
+        author=author,
+        institute=institute,
+        date=date,
+        abstract=abstract,
+        paper_size=paper_size,
+        margin=margin,
+        font_size=font_size,
+        toc=toc,
+        number_sections=number_sections,
     )
     return {"document_id": doc.id, "metadata": vars(doc.metadata)}
 
@@ -180,7 +190,6 @@ def set_section(
     except (ValueError, IndexError) as exc:
         return {"success": False, "error": str(exc)}
 
-
     res = {
         "success": True,
         "document_id": document_id,
@@ -232,9 +241,18 @@ def update_document_metadata(
     try:
         doc = _doc_store.get_document(document_id)
         meta = _doc_store.update_document_metadata(
-            doc, title=title, subtitle=subtitle, author=author, institute=institute,
-            date=date, abstract=abstract, paper_size=paper_size, margin=margin,
-            font_size=font_size, toc=toc, number_sections=number_sections,
+            doc,
+            title=title,
+            subtitle=subtitle,
+            author=author,
+            institute=institute,
+            date=date,
+            abstract=abstract,
+            paper_size=paper_size,
+            margin=margin,
+            font_size=font_size,
+            toc=toc,
+            number_sections=number_sections,
         )
     except ValueError as exc:
         return {"success": False, "error": str(exc)}
@@ -271,12 +289,14 @@ def list_documents() -> dict:
     docs = []
     for d in _doc_store.list_documents():
         with d.lock:
-            docs.append({
-                "document_id": d.id,
-                "title": d.metadata.title,
-                "chapter_count": len(d.chapters),
-                "artifacts": list(d.artifacts.keys()),
-            })
+            docs.append(
+                {
+                    "document_id": d.id,
+                    "title": d.metadata.title,
+                    "chapter_count": len(d.chapters),
+                    "artifacts": list(d.artifacts.keys()),
+                }
+            )
     return {"documents": docs}
 
 
@@ -344,8 +364,7 @@ def render_document_as_pngs(
         return {
             "success": False,
             "error": (
-                f"No compiled '{output_format}' artifact found for {document_id!r}. "
-                "Call compile_document first."
+                f"No compiled '{output_format}' artifact found for {document_id!r}. Call compile_document first."
             ),
         }
 

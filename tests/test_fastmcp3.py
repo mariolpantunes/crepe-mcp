@@ -1,4 +1,5 @@
 """Unit tests for FastMCP 3.X features: instructions, resources, prompts, and mounting."""
+
 from __future__ import annotations
 
 import os
@@ -131,7 +132,6 @@ class TestLibreOfficeProfileIsolation(unittest.TestCase):
         self.assertTrue(any(arg.startswith("-env:UserInstallation=file://") for arg in cmd))
         self.assertIn("--headless", cmd)
         self.assertIn("--convert-to", cmd)
-
 
 
 if __name__ == "__main__":

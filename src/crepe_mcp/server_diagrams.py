@@ -16,6 +16,7 @@ Group F (1):
 Environment variables:
   CREPE_DRAWIO_PATH — path to draw.io executable (auto-detected if absent)
 """
+
 from __future__ import annotations
 
 from fastmcp import FastMCP
@@ -49,6 +50,7 @@ def drawio_diagram_prompt(
         "3. Validate diagram with lint_drawio(input_path=...).\n"
         "4. Export to PNG for slides using export_drawio(transparent=True, scale=2.0)."
     )
+
 
 @mcp.tool
 def export_drawio(
@@ -97,6 +99,8 @@ def inspect_drawio(input_path: str) -> dict:
     input_path : absolute path to the .drawio / .xml file.
     """
     return _drawio.inspect_drawio(input_path)
+
+
 @mcp.tool
 def lint_drawio(input_path: str) -> dict:
     """Validate a .drawio file structure without invoking draw.io. Call before export_drawio.
@@ -106,6 +110,7 @@ def lint_drawio(input_path: str) -> dict:
     """
     report = _linter.lint_drawio_file(input_path)
     return report.to_dict()
+
 
 def main() -> None:
     """Console-script entrypoint for the standalone crepe-diagrams server."""

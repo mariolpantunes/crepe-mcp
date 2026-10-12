@@ -130,9 +130,15 @@ def _justified(pieces: list[Line]) -> bool:
     gaps = [b.x0 - a.x1 for a, b in zip(pieces, pieces[1:], strict=False)]
     return (
         len(pieces) >= 3
-        and all(p.font == first.font and abs(p.size - first.size) <= SAME_SIZE * first.size
-                and abs(p.y1 - first.y1) <= SAME_SIZE * first.size for p in pieces)
-        and 0 < min(gaps) and max(gaps) <= first.size and max(gaps) - min(gaps) <= SAME_SIZE * first.size
+        and all(
+            p.font == first.font
+            and abs(p.size - first.size) <= SAME_SIZE * first.size
+            and abs(p.y1 - first.y1) <= SAME_SIZE * first.size
+            for p in pieces
+        )
+        and 0 < min(gaps)
+        and max(gaps) <= first.size
+        and max(gaps) - min(gaps) <= SAME_SIZE * first.size
     )
 
 
@@ -143,13 +149,23 @@ def _lines_from(page_no: int, data: Any) -> list[Line]:
     index = 0
     while index < len(lines):
         end = index + 1
-        while end < len(lines) and abs(lines[end].y1 - lines[index].y1) <= SAME_SIZE * lines[index].size \
-                and lines[end].x0 > lines[end - 1].x1:
+        while (
+            end < len(lines)
+            and abs(lines[end].y1 - lines[index].y1) <= SAME_SIZE * lines[index].size
+            and lines[end].x0 > lines[end - 1].x1
+        ):
             end += 1
         run = lines[index:end]
         if _justified(run):
-            out.append(replace(run[0], x1=run[-1].x1, y0=min(p.y0 for p in run), y1=max(p.y1 for p in run),
-                               text=" ".join(p.text for p in run)))
+            out.append(
+                replace(
+                    run[0],
+                    x1=run[-1].x1,
+                    y0=min(p.y0 for p in run),
+                    y1=max(p.y1 for p in run),
+                    text=" ".join(p.text for p in run),
+                )
+            )
         else:
             out.extend(run)
         index = end
@@ -239,10 +255,14 @@ def _classify_margins(pages: list[Page], metrics: Metrics) -> None:
                 a - b == shift_by if counter else a in (b, b + shift_by) for a, b in zip(others, numbers, strict=True)
             )
 
-        found = sorted({page_no} | {
-            other_page for other_page, y, text in seen.get(key, [])
-            if abs(y - line.y0) <= shift and follows(text, other_page)
-        })
+        found = sorted(
+            {page_no}
+            | {
+                other_page
+                for other_page, y, text in seen.get(key, [])
+                if abs(y - line.y0) <= shift and follows(text, other_page)
+            }
+        )
         first = last = found.index(page_no)
         while first > 0 and found[first] - found[first - 1] <= RUNNING_PAGE_DISTANCE:
             first -= 1

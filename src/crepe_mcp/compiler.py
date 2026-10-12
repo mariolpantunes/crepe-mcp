@@ -1,4 +1,5 @@
 """Invokes pandoc to compile a presentation to PDF (Beamer) or PPTX."""
+
 from __future__ import annotations
 
 import os
@@ -55,33 +56,36 @@ def compile_to_pdf(
         raise CompileError("lualatex is not installed or not on PATH (required for PDF output)")
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
-    config_path, slides_path, markdown = _write_sources(
-        presentation, theme=theme, highlight_style=highlight_style
-    )
+    config_path, slides_path, markdown = _write_sources(presentation, theme=theme, highlight_style=highlight_style)
     # Only ask pandoc for a table of contents if the deck actually defines
     # section headings ("# Section Title" slides); otherwise Beamer's
     # \tableofcontents renders a blank frame with nothing to list.
     toc_flags = ["--toc", "--toc-depth=1"] if has_sections(markdown) else []
     cmd = [
-        PANDOC, "-s",
+        PANDOC,
+        "-s",
         f"--metadata-file={config_path}",
         "--slide-level=2",
-        "-t", "beamer",
+        "-t",
+        "beamer",
         "--pdf-engine=lualatex",
         *toc_flags,
-        "-o", output_path,
+        "-o",
+        output_path,
         slides_path,
     ]
     try:
         result = subprocess.run(
-            cmd, cwd=presentation.workdir,
-            capture_output=True, text=True, timeout=timeout,
+            cmd,
+            cwd=presentation.workdir,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
         )
     except subprocess.TimeoutExpired as exc:
         raise CompileError(f"pandoc timed out after {timeout}s building PDF") from exc
     if result.returncode != 0:
         raise CompileError(f"pandoc failed building PDF:\n{result.stderr.strip()}")
-
 
 
 def compile_to_pptx(
@@ -114,8 +118,7 @@ def compile_to_pptx(
         )
     if highlight_style != "tango":
         print(
-            f"compile_to_pptx: 'highlight_style' ({highlight_style!r}) is ignored "
-            "for PPTX output.",
+            f"compile_to_pptx: 'highlight_style' ({highlight_style!r}) is ignored for PPTX output.",
             file=sys.stderr,
         )
 
@@ -123,18 +126,23 @@ def compile_to_pptx(
     # regardless of target; pandoc simply ignores the ones it doesn't use for PPTX.
     config_path, slides_path, _markdown = _write_sources(presentation)
     cmd = [
-        PANDOC, "-s",
+        PANDOC,
+        "-s",
         f"--metadata-file={config_path}",
         "--slide-level=2",
-        "-o", output_path,
+        "-o",
+        output_path,
         slides_path,
     ]
     if reference_doc:
         cmd.append(f"--reference-doc={reference_doc}")
     try:
         result = subprocess.run(
-            cmd, cwd=presentation.workdir,
-            capture_output=True, text=True, timeout=timeout,
+            cmd,
+            cwd=presentation.workdir,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
         )
     except subprocess.TimeoutExpired as exc:
         raise CompileError(f"pandoc timed out after {timeout}s building PPTX") from exc

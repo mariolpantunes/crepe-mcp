@@ -1,4 +1,5 @@
 """Shared server runner and lifecycle helper for CREPE MCP servers."""
+
 from __future__ import annotations
 
 import atexit
@@ -28,6 +29,7 @@ def run_server(mcp: FastMCP) -> None:
     def _on_sigint(_signum: int, _frame: object) -> None:
         try:
             from crepe_mcp.research import _kill_browser_group
+
             _kill_browser_group()
         except Exception:
             pass
@@ -36,6 +38,7 @@ def run_server(mcp: FastMCP) -> None:
     def _on_sigterm_early(_signum: int, _frame: object) -> None:
         try:
             from crepe_mcp.research import _kill_browser_group
+
             _kill_browser_group()
         except Exception:
             pass

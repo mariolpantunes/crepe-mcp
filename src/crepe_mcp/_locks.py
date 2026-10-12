@@ -3,6 +3,7 @@
 Provides TicketLock — a mutex that grants entry in strict FIFO arrival order,
 used by both the presentation store and the document store.
 """
+
 from __future__ import annotations
 
 import threading

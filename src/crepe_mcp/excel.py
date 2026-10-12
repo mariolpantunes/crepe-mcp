@@ -2,6 +2,7 @@
 
 Uses openpyxl for fast, pure-Python spreadsheet creation, formatting, and reading.
 """
+
 from __future__ import annotations
 
 import os
@@ -43,7 +44,6 @@ def create_excel(
     wb = openpyxl.Workbook()
     if wb.active is not None:
         wb.remove(wb.active)
-
 
     sheet_list = sheets if (sheets is not None and len(sheets) > 0) else [{"name": "Sheet1", "headers": [], "rows": []}]
 
@@ -126,13 +126,15 @@ def inspect_excel(input_path: str, max_rows: int = 100) -> dict:
                 break
             rows_preview.append([str(c) if c is not None else "" for c in row])
 
-        sheet_data.append({
-            "name": sheet_name,
-            "max_row": ws.max_row,
-            "max_column": ws.max_column,
-            "preview_rows": len(rows_preview),
-            "rows": rows_preview,
-        })
+        sheet_data.append(
+            {
+                "name": sheet_name,
+                "max_row": ws.max_row,
+                "max_column": ws.max_column,
+                "preview_rows": len(rows_preview),
+                "rows": rows_preview,
+            }
+        )
 
     return {
         "success": True,

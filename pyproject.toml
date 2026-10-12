@@ -42,7 +42,7 @@ crepe-reader        = "crepe_mcp.server_reader:main"
 packages = ["src/crepe_mcp"]
 
 [tool.hatch.build.targets.sdist]
-include = ["src/", "README.md", "pyproject.toml"]
+include = ["src/", "skills/", "setup.py", "README.md", "LICENSE", "CITATION.cff", "pyproject.toml"]
 
 [tool.ruff]
 target-version = "py312"

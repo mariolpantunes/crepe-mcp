@@ -9,6 +9,7 @@ Environment variables (all prefixed CREPE_):
 
 The `browser_lifespan` context manager is exported here for use as the FastMCP lifespan.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -45,11 +46,10 @@ def _get_browser_lock() -> asyncio.Lock:
     return _browser_lock
 
 
-
-
 # ---------------------------------------------------------------------------
 # Academic search — Semantic Scholar
 # ---------------------------------------------------------------------------
+
 
 def academic_search(query: str, limit: int = 5) -> dict:
     """Search Semantic Scholar for academic papers. Reads CREPE_SEMANTIC_SCHOLAR_API_KEY if set."""
@@ -74,8 +74,7 @@ def academic_search(query: str, limit: int = 5) -> dict:
             return {
                 "papers": [],
                 "error": (
-                    "Semantic Scholar rate limit (429). Try again shortly or "
-                    "configure CREPE_SEMANTIC_SCHOLAR_API_KEY."
+                    "Semantic Scholar rate limit (429). Try again shortly or configure CREPE_SEMANTIC_SCHOLAR_API_KEY."
                 ),
             }
 
@@ -89,11 +88,13 @@ def academic_search(query: str, limit: int = 5) -> dict:
         pdf_url = open_access.get("url") if isinstance(open_access, dict) else None
         link = pdf_url or paper.get("url") or "No link available"
         abstract = paper.get("abstract") or "No abstract available."
-        papers.append({
-            "title": paper.get("title", ""),
-            "link": link,
-            "abstract": abstract[:400] + ("…" if len(abstract) > 400 else ""),
-        })
+        papers.append(
+            {
+                "title": paper.get("title", ""),
+                "link": link,
+                "abstract": abstract[:400] + ("…" if len(abstract) > 400 else ""),
+            }
+        )
     return {"papers": papers}
 
 
@@ -129,19 +130,21 @@ def arxiv_search(query: str, limit: int = 5) -> dict:
         if not pdf_link:
             pdf_link = "No link available"
 
-        papers.append({
-            "title": title,
-            "published": published[:10],
-            "link": pdf_link,
-            "abstract": summary[:400] + ("…" if len(summary) > 400 else ""),
-        })
+        papers.append(
+            {
+                "title": title,
+                "published": published[:10],
+                "link": pdf_link,
+                "abstract": summary[:400] + ("…" if len(summary) > 400 else ""),
+            }
+        )
     return {"papers": papers}
-
 
 
 # ---------------------------------------------------------------------------
 # General web search — Tavily API (CREPE_TAVILY_API_KEY)
 # ---------------------------------------------------------------------------
+
 
 def web_search(query: str, max_results: int = 5) -> dict:
     """Search the web using Tavily. Returns a warning if key is absent."""
@@ -150,18 +153,17 @@ def web_search(query: str, max_results: int = 5) -> dict:
     if not api_key:
         return {
             "results": [],
-            "warning": (
-                "CREPE_TAVILY_API_KEY is not set. "
-                "Export it in your environment to enable web search."
-            ),
+            "warning": ("CREPE_TAVILY_API_KEY is not set. Export it in your environment to enable web search."),
         }
-    payload = json.dumps({
-        "api_key": api_key,
-        "query": query,
-        "search_depth": "basic",
-        "include_answer": False,
-        "max_results": max_results,
-    }).encode("utf-8")
+    payload = json.dumps(
+        {
+            "api_key": api_key,
+            "query": query,
+            "search_depth": "basic",
+            "include_answer": False,
+            "max_results": max_results,
+        }
+    ).encode("utf-8")
     req = urllib.request.Request(
         "https://api.tavily.com/search",
         data=payload,
@@ -190,14 +192,12 @@ def web_search(query: str, max_results: int = 5) -> dict:
 # Wikipedia search + read
 # ---------------------------------------------------------------------------
 
+
 def wikipedia_search(query: str, limit: int = 3) -> dict:
     """Search Wikipedia; return titles, URLs, and excerpts."""
     limit = max(1, min(limit, 50))
     encoded = urllib.parse.quote(query)
-    url = (
-        f"https://en.wikipedia.org/w/api.php"
-        f"?action=query&list=search&srsearch={encoded}&format=json"
-    )
+    url = f"https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch={encoded}&format=json"
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
     try:
         with urllib.request.urlopen(req, timeout=15) as resp:
@@ -217,10 +217,7 @@ def wikipedia_search(query: str, limit: int = 3) -> dict:
 def wikipedia_read(title: str, max_chars: int = 15000) -> dict:
     """Fetch full plain-text of a Wikipedia article by exact title."""
     encoded = urllib.parse.quote(title)
-    url = (
-        f"https://en.wikipedia.org/w/api.php"
-        f"?action=query&prop=extracts&explaintext=1&titles={encoded}&format=json"
-    )
+    url = f"https://en.wikipedia.org/w/api.php?action=query&prop=extracts&explaintext=1&titles={encoded}&format=json"
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
     try:
         with urllib.request.urlopen(req, timeout=15) as resp:
@@ -243,10 +240,13 @@ def wikipedia_read(title: str, max_chars: int = 15000) -> dict:
 # Webpage fetch — Playwright (shared browser) or urllib fallback
 # ---------------------------------------------------------------------------
 
+
 def _strip_html(raw: str) -> str:
     text = re.sub(
         r"<(style|script|head|meta|noscript|svg).*?>.*?</\1>",
-        " ", raw, flags=re.DOTALL | re.IGNORECASE,
+        " ",
+        raw,
+        flags=re.DOTALL | re.IGNORECASE,
     )
     text = re.sub(r"<[^>]+>", " ", text)
     return html.unescape(re.sub(r"\s+", " ", text).strip())
@@ -279,9 +279,7 @@ async def fetch_webpage(url: str, max_chars: int = 15000) -> dict:
         try:
             # Each call gets an isolated context (cookies, cache, storage)
             # so concurrent fetches don't interfere with each other.
-            context = await browser.new_context(
-                user_agent="Mozilla/5.0 (compatible; CREPE/1.0)"
-            )
+            context = await browser.new_context(user_agent="Mozilla/5.0 (compatible; CREPE/1.0)")
             page = await context.new_page()
             await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
             # inner_text gives rendered visible text — much cleaner than
@@ -310,7 +308,8 @@ async def fetch_webpage(url: str, max_chars: int = 15000) -> dict:
     )
     try:
         req = urllib.request.Request(
-            url, headers={"User-Agent": "Mozilla/5.0 (compatible; CREPE/1.0)"},
+            url,
+            headers={"User-Agent": "Mozilla/5.0 (compatible; CREPE/1.0)"},
         )
         with urllib.request.urlopen(req, timeout=15) as resp_obj:
             raw = resp_obj.read().decode("utf-8", errors="replace")
@@ -320,9 +319,11 @@ async def fetch_webpage(url: str, max_chars: int = 15000) -> dict:
 
     return {"content": content, "warning": warning}
 
+
 # ---------------------------------------------------------------------------
 # Browser lifespan — used by server_research.py. Pass as `lifespan=` to FastMCP.
 # ---------------------------------------------------------------------------
+
 
 def _kill_browser_group() -> None:
     """Kill the entire Chromium process group (idempotent).
@@ -375,12 +376,11 @@ async def _ensure_browser() -> Any:
                 return None
 
         from playwright.async_api import async_playwright
+
         pw = await async_playwright().start()
         _playwright_instance = pw
 
-        profiles_before: set[str] = set(
-            glob.glob("/tmp/playwright_chromiumdev_profile-*")
-        )
+        profiles_before: set[str] = set(glob.glob("/tmp/playwright_chromiumdev_profile-*"))
         browser = await pw.chromium.launch(
             headless=True,
             executable_path=browser_path,
@@ -392,16 +392,16 @@ async def _ensure_browser() -> Any:
         )
         _playwright_browser = browser
 
-        profiles_after: set[str] = set(
-            glob.glob("/tmp/playwright_chromiumdev_profile-*")
-        )
+        profiles_after: set[str] = set(glob.glob("/tmp/playwright_chromiumdev_profile-*"))
         new_profiles = profiles_after - profiles_before
         if new_profiles:
             profile_dir = next(iter(new_profiles))
             try:
                 result = subprocess.run(
                     ["pgrep", "-f", profile_dir],
-                    capture_output=True, text=True, timeout=3,
+                    capture_output=True,
+                    text=True,
+                    timeout=3,
                 )
                 pids = [int(p) for p in result.stdout.split() if p.isdigit()]
                 if pids:

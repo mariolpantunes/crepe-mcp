@@ -5,6 +5,7 @@ Runs all 17 tools across Group A (Stateful Presentation Builder) and Group B
 (Research & Web Utilities), asserting expected structure, error/warning handling,
 and physical file creation (.pdf, .pptx, and .png sequences).
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -87,11 +88,11 @@ def main() -> None:
         title="Layouts & Math",
         content=(
             ":::: {.columns}\n"
-            "::: {.column width=\"50%\"}\n"
+            '::: {.column width="50%"}\n'
             "Code Block:\n"
             "```python\nprint('hello')\n```\n"
             ":::\n"
-            "::: {.column width=\"50%\"}\n"
+            '::: {.column width="50%"}\n'
             "Equation:\n"
             "$$ E = mc^2 $$\n"
             ":::\n"
@@ -119,11 +120,11 @@ def main() -> None:
         title="Layouts & Updated Math",
         content=(
             ":::: {.columns}\n"
-            "::: {.column width=\"50%\"}\n"
+            '::: {.column width="50%"}\n'
             "Code Block:\n"
             "```python\nprint('hello crepe')\n```\n"
             ":::\n"
-            "::: {.column width=\"50%\"}\n"
+            '::: {.column width="50%"}\n'
             "Equation:\n"
             "$$ a^2 + b^2 = c^2 $$\n"
             ":::\n"
@@ -146,8 +147,7 @@ def main() -> None:
     res_get_slide = call_tool(server.get_slide, presentation_id=pres_id, slide_index=1)
     print_check(
         "get_slide verifies replaced content",
-        res_get_slide.get("success") is True
-        and "$$ a^2 + b^2 = c^2 $$" in res_get_slide.get("content", ""),
+        res_get_slide.get("success") is True and "$$ a^2 + b^2 = c^2 $$" in res_get_slide.get("content", ""),
         "Verified updated math equation in Slide 1",
     )
 
@@ -163,9 +163,7 @@ def main() -> None:
     )
     print_check(
         "set_slide insert=True shifts later slides and grows the deck",
-        res_insert.get("action") == "inserted"
-        and res_insert.get("index") == 1
-        and res_insert.get("slide_count") == 4,
+        res_insert.get("action") == "inserted" and res_insert.get("index") == 1 and res_insert.get("slide_count") == 4,
         f"action={res_insert.get('action')}, slide_count={res_insert.get('slide_count')}",
     )
     res_shifted = call_tool(server.get_slide, presentation_id=pres_id, slide_index=2)
@@ -248,7 +246,6 @@ def main() -> None:
     )
     call_tool(server.cleanup_presentation, presentation_id=dup_id)
 
-
     # 9. concurrency: expected_slide_count guard makes concurrent set_slide
     # calls fail cleanly instead of silently landing at an unintended
     # position. A plain lock alone measurably isn't enough here -- the
@@ -266,8 +263,12 @@ def main() -> None:
 
     def _race_for_first_slide(i: int) -> None:
         results[i] = call_tool(
-            server.set_slide, presentation_id=guard_pid, index=0,
-            title=f"Thread {i}", content=f"content {i}", expected_slide_count=0,
+            server.set_slide,
+            presentation_id=guard_pid,
+            index=0,
+            title=f"Thread {i}",
+            content=f"content {i}",
+            expected_slide_count=0,
         )
 
     threads = [threading.Thread(target=_race_for_first_slide, args=(i,)) for i in range(N)]
@@ -289,8 +290,12 @@ def main() -> None:
     )
 
     res_guard_ok = call_tool(
-        server.set_slide, presentation_id=guard_pid, index=1,
-        title="Second slide", content="- ok", expected_slide_count=1,
+        server.set_slide,
+        presentation_id=guard_pid,
+        index=1,
+        title="Second slide",
+        content="- ok",
+        expected_slide_count=1,
     )
     print_check(
         "expected_slide_count matching the true current count succeeds normally",
@@ -341,8 +346,10 @@ def main() -> None:
         f"title match={orig_slide_1.get('title') == new_slide_1.get('title')}",
     )
     res_import_both = call_tool(
-        server.import_presentation_source, presentation_id=new_pid,
-        markdown="## x", source_path=res_export["slides_path"],
+        server.import_presentation_source,
+        presentation_id=new_pid,
+        markdown="## x",
+        source_path=res_export["slides_path"],
     )
     print_check(
         "import_presentation_source rejects passing both markdown and source_path",
@@ -538,9 +545,8 @@ def main() -> None:
     print("\nTesting fetch_webpage (urllib fallback mode)...")
     os.environ.pop("CREPE_HEADLESS_BROWSER_PATH", None)
     res_fetch = asyncio.run(server.fetch_webpage(url="https://example.com", max_chars=1000))
-    has_fallback_warning = (
-        "CREPE_HEADLESS_BROWSER_PATH is not set" in res_fetch.get("warning", "")
-        or bool(res_fetch.get("browser_used"))
+    has_fallback_warning = "CREPE_HEADLESS_BROWSER_PATH is not set" in res_fetch.get("warning", "") or bool(
+        res_fetch.get("browser_used")
     )
     print_check(
         "fetch_webpage (urllib fallback mode)",

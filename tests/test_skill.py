@@ -2,6 +2,7 @@
 
 Run with: python -m unittest tests.test_skill -v
 """
+
 import importlib.util
 import re
 import sys
@@ -57,7 +58,7 @@ def frontmatter(text: str) -> tuple[dict, str]:
         else:
             fields[key] = {}
             parent = key
-    return fields, text[m.end():]
+    return fields, text[m.end() :]
 
 
 def tool_names() -> set[str]:
@@ -142,6 +143,15 @@ class SkillTests(unittest.TestCase):
 
             report = lint_drawio_file(str(out))
             self.assertTrue(report.valid, report.issues)
+
+    def test_sdist_carries_the_installer_and_the_skill(self):
+        import tomllib
+
+        root = self.SKILL_DIR.parents[1]
+        config = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
+        included = config["tool"]["hatch"]["build"]["targets"]["sdist"]["include"]
+        for needed in ("setup.py", "skills/"):
+            self.assertIn(needed, included)
 
     def test_dg_script_help_exits_zero_on_stdout(self):
         import subprocess
@@ -230,6 +240,7 @@ class GooseConfigTests(unittest.TestCase):
         for _ in range(8):
             self.setup.backup_file(self.setup.GOOSE_CONFIG_PATH, keep=3)
             import time
+
             time.sleep(1.01)
         self.assertEqual(len(list(Path(self.tmp.name).glob("config.yaml.bak-*"))), 3)
 

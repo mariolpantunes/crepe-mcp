@@ -2,6 +2,7 @@
 
 Run with: python -m unittest tests.test_setup_keys -v
 """
+
 import json
 import os
 import stat

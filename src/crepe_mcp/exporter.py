@@ -9,6 +9,7 @@ Environment variables (all prefixed CREPE_):
   CREPE_LIBREOFFICE_PATH — path to a LibreOffice/soffice executable.
       Overrides auto-detection (PATH, macOS app bundle, Flatpak on Linux).
 """
+
 from __future__ import annotations
 
 import os
@@ -47,7 +48,8 @@ def _find_libreoffice() -> list[str] | None:
         try:
             result = subprocess.run(
                 ["flatpak", "info", "org.libreoffice.LibreOffice"],
-                capture_output=True, timeout=10,
+                capture_output=True,
+                timeout=10,
             )
             if result.returncode == 0:
                 # Flatpak gives every app a private tmpfs for /tmp regardless of
@@ -55,7 +57,10 @@ def _find_libreoffice() -> list[str] | None:
                 # needed since presentation workdirs live under the system tempdir
                 # but output_path/output_dir can point anywhere on the host.
                 return [
-                    "flatpak", "run", "--filesystem=host", "--filesystem=/tmp",
+                    "flatpak",
+                    "run",
+                    "--filesystem=host",
+                    "--filesystem=/tmp",
                     "org.libreoffice.LibreOffice",
                 ]
         except Exception:
@@ -77,8 +82,10 @@ def _render_office_to_pngs(
         cmd = cmd_prefix + [
             f"-env:UserInstallation=file://{profile_dir}",
             "--headless",
-            "--convert-to", "pdf",
-            "--outdir", output_dir,
+            "--convert-to",
+            "pdf",
+            "--outdir",
+            output_dir,
             pptx_path,
         ]
         try:
@@ -123,8 +130,11 @@ def _render_in_workers(pdf_path: str, output_dir: str, dpi: int, count: int) -> 
         for index in range(workers):
             pages = [str(number) for number in range(1 + index, count + 1, workers)]
             cmd = [sys.executable, "-m", "crepe_mcp.render_worker", pdf_path, output_dir, str(dpi), *pages]
-            running.append(subprocess.Popen(cmd, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                                            stderr=subprocess.DEVNULL))
+            running.append(
+                subprocess.Popen(
+                    cmd, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+                )
+            )
         for process in running:
             try:
                 ok = process.wait(timeout=max(0.0, deadline - monotonic())) == 0 and ok

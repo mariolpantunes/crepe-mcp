@@ -30,12 +30,17 @@ class TestEquations(unittest.TestCase):
 
     def test_fraction_scripts_and_limits(self):
         parts = [
-            ("y", 60, 0, 1), ("=", 72, 0, 1),
-            ("max", 90, 0, 1, "tiro"), ("i", 100, 8, 0.7),  # limit below max
-            ("a", 125, -7, 1), ("b", 130.5, -7, 1),         # numerator above the row
-            ("c", 129, 7, 1),                               # denominator below the row
-            ("x", 150, 0, 1), ("2", 156, -4, 0.7),          # superscript
-            ("z", 170, 0, 1), ("k", 176, 2, 0.7),           # subscript
+            ("y", 60, 0, 1),
+            ("=", 72, 0, 1),
+            ("max", 90, 0, 1, "tiro"),
+            ("i", 100, 8, 0.7),  # limit below max
+            ("a", 125, -7, 1),
+            ("b", 130.5, -7, 1),  # numerator above the row
+            ("c", 129, 7, 1),  # denominator below the row
+            ("x", 150, 0, 1),
+            ("2", 156, -4, 0.7),  # superscript
+            ("z", 170, 0, 1),
+            ("k", 176, 2, 0.7),  # subscript
         ]
         text, markup, confidence = self.rebuild(parts)
         self.assertEqual(text, "y = max_i (ab)/(c) x^2 z_k")
@@ -47,8 +52,9 @@ class TestEquations(unittest.TestCase):
 
     def test_scale_invariance(self):
         small = self.rebuild([("x", 60, 0, 1), ("2", 66, -4, 0.7), ("=", 80, 0, 1), ("y", 95, 0, 1)])
-        doc, page, number_box = page_with([("x", 60, 0, 1.0), ("2", 69, -6, 0.7), ("=", 90, 0, 1.0),
-                                           ("y", 110, 0, 1.0)], size=15.0)
+        doc, page, number_box = page_with(
+            [("x", 60, 0, 1.0), ("2", 69, -6, 0.7), ("=", 90, 0, 1.0), ("y", 110, 0, 1.0)], size=15.0
+        )
         big, _ = equation_text(page, (40, 60, 350, 140), number_box)
         doc.close()
         self.assertEqual(small[0], "x^2 = y")

@@ -3,6 +3,7 @@
 Renders the given 1-based pages to ``slide_NNN.png`` in OUTDIR. Started as a plain subprocess by
 ``exporter.render_pdf_to_pngs``, so pages render side by side without sharing any pymupdf state.
 """
+
 from __future__ import annotations
 
 import os

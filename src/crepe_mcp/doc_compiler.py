@@ -1,4 +1,5 @@
 """Compiles document projects to A4 PDF or DOCX using Pandoc."""
+
 from __future__ import annotations
 
 import os
@@ -50,7 +51,8 @@ def compile_document_to_pdf(
         "-s",
         "--pdf-engine=lualatex",
         doc_md_path,
-        "-o", output_path,
+        "-o",
+        output_path,
     ]
     if toc:
         cmd.append("--toc")
@@ -59,12 +61,14 @@ def compile_document_to_pdf(
 
     try:
         res = subprocess.run(
-            cmd, cwd=document.workdir,
-            capture_output=True, text=True, timeout=timeout,
+            cmd,
+            cwd=document.workdir,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
         )
     except subprocess.TimeoutExpired as exc:
         raise DocCompileError(f"pandoc timed out after {timeout}s compiling PDF document") from exc
-
 
     if res.returncode != 0:
         raise DocCompileError(f"pandoc failed compiling PDF document:\n{res.stderr.strip()}")
@@ -97,7 +101,8 @@ def compile_document_to_docx(
         PANDOC,
         "-s",
         doc_md_path,
-        "-o", output_path,
+        "-o",
+        output_path,
     ]
     if toc:
         cmd.append("--toc")
@@ -108,12 +113,14 @@ def compile_document_to_docx(
 
     try:
         res = subprocess.run(
-            cmd, cwd=document.workdir,
-            capture_output=True, text=True, timeout=timeout,
+            cmd,
+            cwd=document.workdir,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
         )
     except subprocess.TimeoutExpired as exc:
         raise DocCompileError(f"pandoc timed out after {timeout}s compiling DOCX document") from exc
-
 
     if res.returncode != 0:
         raise DocCompileError(f"pandoc failed compiling DOCX document:\n{res.stderr.strip()}")

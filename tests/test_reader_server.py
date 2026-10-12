@@ -2,6 +2,7 @@
 
 Run with: python -m unittest discover -s tests -p "test_reader_server.py" -v
 """
+
 import asyncio
 import json
 import os
@@ -81,8 +82,19 @@ class ReaderTestCase(IsolatedTestCase):
 class TestToolList(unittest.TestCase):
     def test_eight_tools(self):
         names = {t.name for t in asyncio.run(mcp.list_tools())}
-        self.assertEqual(names, {"open_document", "read_pages", "read_section", "search_document", "list_assets",
-                                 "get_asset", "render_page_png", "document_to_markdown"})
+        self.assertEqual(
+            names,
+            {
+                "open_document",
+                "read_pages",
+                "read_section",
+                "search_document",
+                "list_assets",
+                "get_asset",
+                "render_page_png",
+                "document_to_markdown",
+            },
+        )
 
 
 class TestPdf(ReaderTestCase):
@@ -198,8 +210,11 @@ class TestPandocFormats(ReaderTestCase):
 
 class TestInputChecks(ReaderTestCase):
     def test_bad_paths_are_agent_errors(self):
-        for path, fragment in (("relative.pdf", "absolute"), ("/nowhere/x.pdf", "No such file"),
-                               (str(self.tmp_path / "x.exe"), "not supported")):
+        for path, fragment in (
+            ("relative.pdf", "absolute"),
+            ("/nowhere/x.pdf", "No such file"),
+            (str(self.tmp_path / "x.exe"), "not supported"),
+        ):
             with self.subTest(path=path), self.assertRaises(ToolError) as caught:
                 call("open_document", path=path)
             self.assertIn(fragment, str(caught.exception))

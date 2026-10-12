@@ -13,6 +13,7 @@ Group G (8):
   open_document, read_pages, read_section, search_document, list_assets, get_asset,
   render_page_png, document_to_markdown
 """
+
 from __future__ import annotations
 
 import json
@@ -131,8 +132,11 @@ def read_section(
     path: DocPath,
     heading: Annotated[
         str,
-        Field(min_length=1, max_length=120,
-              description="Outline heading, e.g. 'Introduction', 'IV. Experiments', '3.2'; case ignored."),
+        Field(
+            min_length=1,
+            max_length=120,
+            description="Outline heading, e.g. 'Introduction', 'IV. Experiments', '3.2'; case ignored.",
+        ),
     ],
     part: Part = "all",
 ) -> str:
@@ -149,8 +153,11 @@ def search_document(
     path: DocPath,
     query: Annotated[
         str,
-        Field(min_length=2, max_length=120,
-              description="Words matched from their start, case-insensitive: a term, dataset, 'Table 3', a number."),
+        Field(
+            min_length=2,
+            max_length=120,
+            description="Words matched from their start, case-insensitive: a term, dataset, 'Table 3', a number.",
+        ),
     ],
     part: Part = "all",
     max_hits: Annotated[int, Field(ge=1, le=40, description="Maximum hits returned.")] = 15,
@@ -177,8 +184,12 @@ def list_assets(
     shown = [a for a in everything if (a["kind"] == kind if kind else a["kind"] != "reference")]
     items = []
     for item in shown:
-        entry: dict[str, Any] = {"id": item["id"], "label": item["label"],
-                                 "page": page_span(item["page"], item["last_page"]), "cited": item["cited"]}
+        entry: dict[str, Any] = {
+            "id": item["id"],
+            "label": item["label"],
+            "page": page_span(item["page"], item["last_page"]),
+            "cited": item["cited"],
+        }
         preview = " ".join((item["caption"] or item["content"]).split())
         if preview:
             entry["caption"] = preview[:CAPTION_PREVIEW]
@@ -202,8 +213,10 @@ def get_asset(
     path: DocPath,
     asset: Annotated[
         str,
-        Field(pattern=r"^[a-z]+:[A-Za-z0-9.]+$",
-              description="Item id from list_assets, e.g. 'figure:3', 'table:II', 'reference:12'."),
+        Field(
+            pattern=r"^[a-z]+:[A-Za-z0-9.]+$",
+            description="Item id from list_assets, e.g. 'figure:3', 'table:II', 'reference:12'.",
+        ),
     ],
     include_image: Annotated[
         bool, Field(description="Attach a cropped image of a PDF item, if images are enabled on this server.")
@@ -224,7 +237,7 @@ def get_asset(
     for mention in mentions[:MENTION_ITEMS]:
         text = paragraphs.get(mention["paragraph"], "")
         at = max(text.find(mention["text"]), 0)
-        context = text[max(0, at - MENTION_CONTEXT): at + len(mention["text"]) + MENTION_CONTEXT]
+        context = text[max(0, at - MENTION_CONTEXT) : at + len(mention["text"]) + MENTION_CONTEXT]
         entry = {"page": mention["page"], "text": " ".join(context.split())}
         if mention["strength"] == "weak":
             entry["certainty"] = "weak (bare number)"

@@ -17,6 +17,7 @@ Environment variables (all CREPE_ prefixed):
   CREPE_SEMANTIC_SCHOLAR_API_KEY  — optional; avoids 429 rate limits
   CREPE_HEADLESS_BROWSER_PATH     — Chromium path for fetch_webpage
 """
+
 from __future__ import annotations
 
 from fastmcp import FastMCP
@@ -33,6 +34,7 @@ CREPE Research Engine Guidelines:
 """
 
 mcp = FastMCP("crepe-research", instructions=RESEARCH_INSTRUCTIONS, lifespan=research.browser_lifespan)
+
 
 @mcp.tool
 def academic_search(query: str, limit: int = 5) -> dict:
@@ -51,7 +53,6 @@ def arxiv_search(query: str, limit: int = 5) -> dict:
     Returns title, publication date, PDF link, and summary.
     """
     return research.arxiv_search(query, limit=limit)
-
 
 
 @mcp.tool
@@ -91,6 +92,7 @@ async def fetch_webpage(url: str, max_chars: int = 15000) -> dict:
     when available, so JS-rendered pages are fully loaded. Falls back to
     urllib + HTML stripping with a warning when no browser is configured."""
     return await research.fetch_webpage(url, max_chars=max_chars)
+
 
 def main() -> None:
     """Console-script entrypoint for the standalone crepe-research server."""

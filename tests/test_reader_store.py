@@ -135,8 +135,10 @@ class TestDocumentStore(IsolatedTestCase):
             DocumentStore.open(self.tmp_path / "missing.pdf")
 
 
-@unittest.skipUnless(REAL_WORKSPACE and (Path(REAL_WORKSPACE) / "papers" / "Access-2026-41373_Proof_hi.pdf").is_file(),
-                     "set CREPE_READER_CORPUS to a folder with papers/")
+@unittest.skipUnless(
+    REAL_WORKSPACE and (Path(REAL_WORKSPACE) / "papers" / "Access-2026-41373_Proof_hi.pdf").is_file(),
+    "set CREPE_READER_CORPUS to a folder with papers/",
+)
 class TestRealAccessProof(IsolatedTestCase):
     def test_structure_facts(self):
         self.addCleanup(close_all)

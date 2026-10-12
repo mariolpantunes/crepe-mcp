@@ -5,6 +5,7 @@ Run with:
 or:
     python -m unittest discover -s tests -p "test_fixes.py" -v
 """
+
 import os
 import sys
 import unittest
@@ -20,6 +21,7 @@ if SRC_DIR not in sys.path:
 # T-01  Any import in doc_store
 # ---------------------------------------------------------------------------
 
+
 class TestT01AnyImport(unittest.TestCase):
     """T-01: `Any` must be importable from doc_store's typing imports."""
 
@@ -28,6 +30,7 @@ class TestT01AnyImport(unittest.TestCase):
         import typing
 
         import crepe_mcp.doc_store as ds
+
         hints = {}
         try:
             hints = typing.get_type_hints(ds.update_document_metadata)
@@ -38,6 +41,7 @@ class TestT01AnyImport(unittest.TestCase):
     def test_update_document_metadata_callable(self):
         """update_document_metadata must run without NameError."""
         from crepe_mcp.doc_store import new_document, update_document_metadata
+
         doc = new_document(title="T01 Test")
         meta = update_document_metadata(doc, title="Updated Title")
         self.assertEqual(meta.title, "Updated Title")
@@ -97,10 +101,13 @@ class TestT02ArxivSearch(unittest.TestCase):
 
     def _run_with_capture(self, xml_body):
         import crepe_mcp.research as research
+
         captured = {}
+
         def fake_urlopen(req, timeout=None):
             captured["url"] = req.get_full_url()
             return _mock_urlopen_ctx(xml_body)
+
         with mock.patch.object(research.urllib.request, "urlopen", side_effect=fake_urlopen):
             result = research.arxiv_search("test query", limit=1)
         return captured.get("url", ""), result
@@ -111,8 +118,8 @@ class TestT02ArxivSearch(unittest.TestCase):
 
     def test_empty_link_fallback_from_id(self):
         import crepe_mcp.research as research
-        with mock.patch.object(research.urllib.request, "urlopen",
-                               return_value=_mock_urlopen_ctx(_ARXIV_XML_NO_LINK)):
+
+        with mock.patch.object(research.urllib.request, "urlopen", return_value=_mock_urlopen_ctx(_ARXIV_XML_NO_LINK)):
             result = research.arxiv_search("test", limit=1)
         papers = result.get("papers", [])
         self.assertEqual(len(papers), 1)
@@ -122,8 +129,8 @@ class TestT02ArxivSearch(unittest.TestCase):
 
     def test_empty_link_fallback_no_id(self):
         import crepe_mcp.research as research
-        with mock.patch.object(research.urllib.request, "urlopen",
-                               return_value=_mock_urlopen_ctx(_ARXIV_XML_EMPTY_ID)):
+
+        with mock.patch.object(research.urllib.request, "urlopen", return_value=_mock_urlopen_ctx(_ARXIV_XML_EMPTY_ID)):
             result = research.arxiv_search("test", limit=1)
         papers = result.get("papers", [])
         self.assertEqual(len(papers), 1)
@@ -131,8 +138,10 @@ class TestT02ArxivSearch(unittest.TestCase):
 
     def test_normal_link_preserved(self):
         import crepe_mcp.research as research
-        with mock.patch.object(research.urllib.request, "urlopen",
-                               return_value=_mock_urlopen_ctx(_ARXIV_XML_WITH_LINK)):
+
+        with mock.patch.object(
+            research.urllib.request, "urlopen", return_value=_mock_urlopen_ctx(_ARXIV_XML_WITH_LINK)
+        ):
             result = research.arxiv_search("test", limit=1)
         papers = result.get("papers", [])
         self.assertEqual(len(papers), 1)
@@ -143,11 +152,13 @@ class TestT02ArxivSearch(unittest.TestCase):
 # T-03  YAML geometry quoting in build_document_markdown
 # ---------------------------------------------------------------------------
 
+
 class TestT03GeometryYaml(unittest.TestCase):
     """T-03: geometry YAML line must not contain Python repr single-quotes."""
 
     def _get_geometry_line(self, margin):
         from crepe_mcp.doc_store import build_document_markdown, new_document
+
         doc = new_document(margin=margin)
         md = build_document_markdown(doc)
         for line in md.splitlines():
@@ -174,11 +185,13 @@ class TestT03GeometryYaml(unittest.TestCase):
 # T-04  duplicate_presentation — no deadlock, correct slide copy
 # ---------------------------------------------------------------------------
 
+
 class TestT04DuplicatePresentation(unittest.TestCase):
     """T-04: duplicate_presentation copies slides correctly without the inner lock."""
 
     def test_slides_are_copied(self):
         from crepe_mcp.store import duplicate_presentation, new_presentation, upsert_slide
+
         pres = new_presentation(title="Original")
         upsert_slide(pres, 0, "Slide One", "Content A")
         upsert_slide(pres, 1, "Slide Two", "Content B")
@@ -189,12 +202,14 @@ class TestT04DuplicatePresentation(unittest.TestCase):
 
     def test_clone_title_has_suffix(self):
         from crepe_mcp.store import duplicate_presentation, new_presentation
+
         pres = new_presentation(title="Source")
         clone = duplicate_presentation(pres.id, title_suffix=" (Copy)")
         self.assertEqual(clone.metadata.title, "Source (Copy)")
 
     def test_clone_slides_are_independent(self):
         from crepe_mcp.store import duplicate_presentation, new_presentation, upsert_slide
+
         pres = new_presentation(title="Base")
         upsert_slide(pres, 0, "Original Title", "Original Content")
         clone = duplicate_presentation(pres.id)
@@ -205,15 +220,18 @@ class TestT04DuplicatePresentation(unittest.TestCase):
         import threading
 
         from crepe_mcp.store import duplicate_presentation, new_presentation, upsert_slide
+
         pres = new_presentation(title="Deadlock Test")
         upsert_slide(pres, 0, "A", "content")
         result = {}
         errors = {}
+
         def run():
             try:
                 result["clone"] = duplicate_presentation(pres.id)
             except Exception as e:
                 errors["error"] = e
+
         t = threading.Thread(target=run)
         t.start()
         t.join(timeout=5)
@@ -226,15 +244,18 @@ class TestT04DuplicatePresentation(unittest.TestCase):
 # T-05  compile_document_to_pdf / compile_document_to_docx — absolute path guard
 # ---------------------------------------------------------------------------
 
+
 class TestT05AbsolutePathGuard(unittest.TestCase):
     """T-05: Both compile functions must raise DocCompileError for relative paths."""
 
     def _make_doc(self):
         from crepe_mcp.doc_store import new_document
+
         return new_document(title="Guard Test")
 
     def test_compile_pdf_relative_path_raises(self):
         from crepe_mcp.doc_compiler import DocCompileError, compile_document_to_pdf
+
         doc = self._make_doc()
         with self.assertRaises(DocCompileError) as ctx:
             compile_document_to_pdf(doc, "relative/report.pdf")
@@ -242,12 +263,14 @@ class TestT05AbsolutePathGuard(unittest.TestCase):
 
     def test_compile_pdf_bare_filename_raises(self):
         from crepe_mcp.doc_compiler import DocCompileError, compile_document_to_pdf
+
         doc = self._make_doc()
         with self.assertRaises(DocCompileError):
             compile_document_to_pdf(doc, "report.pdf")
 
     def test_compile_docx_relative_path_raises(self):
         from crepe_mcp.doc_compiler import DocCompileError, compile_document_to_docx
+
         doc = self._make_doc()
         with self.assertRaises(DocCompileError) as ctx:
             compile_document_to_docx(doc, "relative/report.docx")
@@ -255,6 +278,7 @@ class TestT05AbsolutePathGuard(unittest.TestCase):
 
     def test_compile_docx_bare_filename_raises(self):
         from crepe_mcp.doc_compiler import DocCompileError, compile_document_to_docx
+
         doc = self._make_doc()
         with self.assertRaises(DocCompileError):
             compile_document_to_docx(doc, "report.docx")
@@ -262,19 +286,20 @@ class TestT05AbsolutePathGuard(unittest.TestCase):
     def test_compile_pdf_absolute_path_passes_guard(self):
         """An absolute path must pass the guard (fail only on missing tool, not path check)."""
         from crepe_mcp.doc_compiler import DocCompileError, compile_document_to_pdf
+
         doc = self._make_doc()
         try:
             compile_document_to_pdf(doc, "/tmp/test_guard_crepe.pdf")
         except DocCompileError as exc:
             msg = str(exc).lower()
-            self.assertNotIn("absolute", msg,
-                             f"Should not fail on path guard for absolute path, got: {exc!r}")
+            self.assertNotIn("absolute", msg, f"Should not fail on path guard for absolute path, got: {exc!r}")
         except Exception:
             pass  # Any other error is fine
 
     def test_presentation_compile_relative_path_raises(self):
         from crepe_mcp.compiler import CompileError, compile_to_pdf, compile_to_pptx
         from crepe_mcp.store import new_presentation
+
         pres = new_presentation(title="Guard Test")
         with self.assertRaises(CompileError) as ctx:
             compile_to_pdf(pres, "relative/test.pdf")
@@ -289,25 +314,28 @@ class TestT05AbsolutePathGuard(unittest.TestCase):
 # T-06  doc_exporter uses public API, not private name
 # ---------------------------------------------------------------------------
 
+
 class TestT06PublicApi(unittest.TestCase):
     """T-06: doc_exporter must not use private (underscore-prefixed) exporter symbols."""
 
     def test_render_via_libreoffice_is_public(self):
         import crepe_mcp.exporter as exp
-        self.assertTrue(hasattr(exp, "render_via_libreoffice"),
-                        "render_via_libreoffice not found in exporter module")
+
+        self.assertTrue(hasattr(exp, "render_via_libreoffice"), "render_via_libreoffice not found in exporter module")
 
     def test_find_libreoffice_is_public(self):
         import crepe_mcp.exporter as exp
-        self.assertTrue(hasattr(exp, "find_libreoffice"),
-                        "find_libreoffice not found in exporter module")
-        self.assertIs(exp.find_libreoffice, exp._find_libreoffice,
-                      "find_libreoffice must be an alias of _find_libreoffice")
+
+        self.assertTrue(hasattr(exp, "find_libreoffice"), "find_libreoffice not found in exporter module")
+        self.assertIs(
+            exp.find_libreoffice, exp._find_libreoffice, "find_libreoffice must be an alias of _find_libreoffice"
+        )
 
     def test_no_private_import_from_exporter(self):
         """Check via AST that doc_exporter imports no private (_-prefixed) names from exporter."""
         import ast
         import os
+
         path = os.path.join(os.path.dirname(__file__), "..", "src", "crepe_mcp", "doc_exporter.py")
         with open(path) as f:
             tree = ast.parse(f.read())
@@ -317,14 +345,17 @@ class TestT06PublicApi(unittest.TestCase):
                 for alias in node.names:
                     if alias.name.startswith("_"):
                         bad_imports.append(alias.name)
-        self.assertEqual(bad_imports, [],
-                         f"doc_exporter still imports private names: {bad_imports}")
+        self.assertEqual(bad_imports, [], f"doc_exporter still imports private names: {bad_imports}")
 
     def test_render_via_libreoffice_is_alias(self):
         import crepe_mcp.exporter as exp
+
         # The private function was renamed to _render_office_to_pngs (L5 fix).
-        self.assertIs(exp.render_via_libreoffice, exp._render_office_to_pngs,
-                      "render_via_libreoffice must be an alias of _render_office_to_pngs")
+        self.assertIs(
+            exp.render_via_libreoffice,
+            exp._render_office_to_pngs,
+            "render_via_libreoffice must be an alias of _render_office_to_pngs",
+        )
 
     def test_linter_detects_forbidden_latex_includegraphics(self):
         """lint_presentation_content must flag \\includegraphics as forbidden_latex.
@@ -334,24 +365,22 @@ class TestT06PublicApi(unittest.TestCase):
         """
         from crepe_mcp.linter import lint_presentation_content
         from crepe_mcp.store import new_presentation
+
         pres = new_presentation(title="Linter Test")
-        raw_slide = (
-            "\\begin{center}\n"
-            "\\includegraphics[width=0.9\\linewidth]{/path/to/img.png}\n"
-            "\\end{center}"
-        )
+        raw_slide = "\\begin{center}\n\\includegraphics[width=0.9\\linewidth]{/path/to/img.png}\n\\end{center}"
         from crepe_mcp.store import upsert_slide
+
         upsert_slide(pres, 0, "Slide 1", raw_slide)
         report = lint_presentation_content(pres)
         forbidden_types = [i.type for i in report.issues]
-        self.assertIn("forbidden_latex", forbidden_types,
-                      "Linter must flag \\includegraphics as forbidden_latex")
+        self.assertIn("forbidden_latex", forbidden_types, "Linter must flag \\includegraphics as forbidden_latex")
         self.assertFalse(report.valid, "Presentation with raw LaTeX must be invalid")
 
     def test_linter_no_false_positive_in_fenced_block(self):
         """Forbidden LaTeX inside a fenced code block must NOT be flagged (M5 fix)."""
         from crepe_mcp.linter import lint_presentation_content
         from crepe_mcp.store import new_presentation, upsert_slide
+
         pres = new_presentation(title="Fence Test")
         # LaTeX inside a fenced block — this is intentional documentation, not broken content
         safe_slide = (
@@ -364,21 +393,21 @@ class TestT06PublicApi(unittest.TestCase):
         upsert_slide(pres, 0, "Slide 1", safe_slide)
         report = lint_presentation_content(pres)
         forbidden_types = [i.type for i in report.issues]
-        self.assertNotIn("forbidden_latex", forbidden_types,
-                         "LaTeX inside a fenced code block must not be flagged")
+        self.assertNotIn("forbidden_latex", forbidden_types, "LaTeX inside a fenced code block must not be flagged")
 
     def test_inspect_drawio_structure_validation(self):
         import tempfile
 
         from crepe_mcp.drawio import inspect_drawio
+
         xml_content = (
             '<mxfile><diagram name="Page-1">'
-            '<mxGraphModel><root>'
+            "<mxGraphModel><root>"
             '<mxCell id="0"/>'
             '<mxCell id="1" parent="0"/>'
             '<mxCell id="2" value="Node" parent="1"/>'
-            '</root></mxGraphModel>'
-            '</diagram></mxfile>'
+            "</root></mxGraphModel>"
+            "</diagram></mxfile>"
         )
         with tempfile.NamedTemporaryFile(suffix=".drawio", mode="w", delete=False) as f:
             f.write(xml_content)
@@ -394,10 +423,10 @@ class TestT06PublicApi(unittest.TestCase):
                 os.remove(tmp_path)
 
 
-
 # ---------------------------------------------------------------------------
 # T-07  Input-validation fixes (H6, H7, M7)
 # ---------------------------------------------------------------------------
+
 
 class TestT07InputValidation(unittest.TestCase):
     """T-07: Verify input guards added in the H6/H7/M7 fix round."""
@@ -405,6 +434,7 @@ class TestT07InputValidation(unittest.TestCase):
     def test_set_chapter_negative_index_raises(self):
         """H6: set_chapter with a negative index must raise ValueError."""
         from crepe_mcp.doc_store import new_document, set_chapter
+
         doc = new_document(title="T07")
         with self.assertRaises(ValueError, msg="set_chapter(-1, ...) must raise ValueError"):
             set_chapter(doc, -1, "Bad Chapter")
@@ -412,6 +442,7 @@ class TestT07InputValidation(unittest.TestCase):
     def test_set_section_negative_index_raises(self):
         """Issue 6 (review-2): set_section with a negative section_index must raise ValueError."""
         from crepe_mcp.doc_store import new_document, set_section
+
         doc = new_document(title="T07b")
         with self.assertRaises(ValueError, msg="set_section(section_index=-1) must raise ValueError"):
             set_section(doc, 0, -1, "Bad Section", "content")
@@ -419,6 +450,7 @@ class TestT07InputValidation(unittest.TestCase):
     def test_set_section_bad_level_raises(self):
         """M7: set_section with level not in (2, 3) must raise ValueError."""
         from crepe_mcp.doc_store import new_document, set_section
+
         doc = new_document(title="T07c")
         with self.assertRaises(ValueError, msg="set_section(level=1) must raise ValueError"):
             set_section(doc, 0, 0, "Section", "content", level=1)
@@ -428,28 +460,29 @@ class TestT07InputValidation(unittest.TestCase):
     def test_update_metadata_ignores_unknown_keys(self):
         """H7: update_metadata must silently drop keys that don't exist on Metadata."""
         from crepe_mcp.store import new_presentation, update_metadata
+
         pres = new_presentation(title="T07d")
         # 'titel' is a typo — must not be set on the Metadata object
         update_metadata(pres, titel="Typo", title="Correct")
         self.assertEqual(pres.metadata.title, "Correct")
-        self.assertFalse(hasattr(pres.metadata, "titel"),
-                         "Typo key 'titel' must not be created on Metadata")
+        self.assertFalse(hasattr(pres.metadata, "titel"), "Typo key 'titel' must not be created on Metadata")
 
     def test_lint_drawio_report_includes_pages(self):
         """M2: lint_drawio_file must populate pages in the LintReport."""
         import tempfile
 
         from crepe_mcp.linter import lint_drawio_file
+
         xml_content = (
             '<mxfile><diagram name="Alpha">'
-            '<mxGraphModel><root>'
+            "<mxGraphModel><root>"
             '<mxCell id="0"/><mxCell id="1" parent="0"/>'
-            '</root></mxGraphModel>'
+            "</root></mxGraphModel>"
             '</diagram><diagram name="Beta">'
-            '<mxGraphModel><root>'
+            "<mxGraphModel><root>"
             '<mxCell id="0"/><mxCell id="1" parent="0"/>'
-            '</root></mxGraphModel>'
-            '</diagram></mxfile>'
+            "</root></mxGraphModel>"
+            "</diagram></mxfile>"
         )
         with tempfile.NamedTemporaryFile(suffix=".drawio", mode="w", delete=False) as f:
             f.write(xml_content)
@@ -470,6 +503,7 @@ class TestT07InputValidation(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # T-08  TicketLock Interrupt Safety & Sub-Server Composition
 # ---------------------------------------------------------------------------
+
 
 class TestT08TicketLockInterruptSafety(unittest.TestCase):
     """T-08: TicketLock must advance counter when a waiting acquire is aborted."""
@@ -605,6 +639,7 @@ class TestT10RobustnessAndNativeDrawio(unittest.TestCase):
 
     def test_find_drawio_finds_native_binary(self):
         from crepe_mcp.drawio import find_drawio
+
         # If /usr/bin/drawio or /opt/drawio/drawio is on the machine, find_drawio should discover it
         cmd = find_drawio()
         if os.path.isfile("/usr/bin/drawio") or os.path.isfile("/opt/drawio/drawio"):
@@ -615,6 +650,7 @@ class TestT10RobustnessAndNativeDrawio(unittest.TestCase):
         import tempfile
 
         from crepe_mcp.excel import create_excel
+
         with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as f:
             tmp_path = f.name
         try:

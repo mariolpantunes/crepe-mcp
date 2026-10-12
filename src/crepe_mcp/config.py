@@ -4,6 +4,7 @@ Lookup order (first existing file wins): `$CREPE_ENV_FILE`, `~/.config/crepe-mcp
 Variables already present in the process environment are never overridden.
 Values are never logged or returned.
 """
+
 from __future__ import annotations
 
 import os
@@ -31,7 +32,7 @@ def parse_env(text: str) -> dict[str, str]:
         if not line or line.startswith("#") or "=" not in line:
             continue
         if line.startswith("export "):
-            line = line[len("export "):].lstrip()
+            line = line[len("export ") :].lstrip()
         key, _, value = line.partition("=")
         value = value.strip()
         if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":

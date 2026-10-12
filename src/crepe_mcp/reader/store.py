@@ -128,8 +128,18 @@ def _build(pdf: Path, db: Path) -> None:
             "INSERT INTO pages (page, width, height, label, source, images, drawings, markup_annots, chars, text) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
-                (p.number, p.width, p.height, p.label, p.source, p.images, p.drawings, p.markup_annots, len(p.text),
-                 p.text)
+                (
+                    p.number,
+                    p.width,
+                    p.height,
+                    p.label,
+                    p.source,
+                    p.images,
+                    p.drawings,
+                    p.markup_annots,
+                    len(p.text),
+                    p.text,
+                )
                 for p in pages
             ],
         )
@@ -137,8 +147,24 @@ def _build(pdf: Path, db: Path) -> None:
             "INSERT INTO lines (id, page, seq, region, col, x0, y0, x1, y1, text, font, size, bold, italic, mono, "
             "color) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
-                (line.id, line.page, line.seq, line.region, line.column, line.x0, line.y0, line.x1, line.y1,
-                 line.text, line.font, line.size, int(line.bold), int(line.italic), int(line.mono), line.color)
+                (
+                    line.id,
+                    line.page,
+                    line.seq,
+                    line.region,
+                    line.column,
+                    line.x0,
+                    line.y0,
+                    line.x1,
+                    line.y1,
+                    line.text,
+                    line.font,
+                    line.size,
+                    int(line.bold),
+                    int(line.italic),
+                    int(line.mono),
+                    line.color,
+                )
                 for page in pages
                 for line in sorted(page.lines, key=lambda line: line.seq)
             ],
@@ -165,9 +191,23 @@ def _build(pdf: Path, db: Path) -> None:
             "content, content_format, method, confidence, paragraph, seq) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
-                (a.segment, a.id, a.kind, a.number, a.label, a.page, a.last_page or a.page,
-                 *(a.bbox or (None, None, None, None)), a.caption,
-                 a.content, a.content_format, a.method, a.confidence, a.paragraph, a.seq)
+                (
+                    a.segment,
+                    a.id,
+                    a.kind,
+                    a.number,
+                    a.label,
+                    a.page,
+                    a.last_page or a.page,
+                    *(a.bbox or (None, None, None, None)),
+                    a.caption,
+                    a.content,
+                    a.content_format,
+                    a.method,
+                    a.confidence,
+                    a.paragraph,
+                    a.seq,
+                )
                 for a in assets
             ],
         )

@@ -14,6 +14,7 @@ Environment variables:
       bundle, or the Flatpak com.jgraph.drawio.desktop package.
       Flatpak installs do not need this variable set.
 """
+
 from __future__ import annotations
 
 import base64
@@ -31,6 +32,7 @@ import zlib
 # Shared helpers (also imported by linter.py — canonical home)
 # ---------------------------------------------------------------------------
 
+
 def try_decode_compressed(text: str) -> str | None:
     """Try to base64-decode and zlib-decompress draw.io diagram text content.
 
@@ -44,7 +46,7 @@ def try_decode_compressed(text: str) -> str | None:
         try:
             xml_bytes = zlib.decompress(decoded_bytes, -15)  # raw deflate
         except zlib.error:
-            xml_bytes = zlib.decompress(decoded_bytes)       # standard zlib
+            xml_bytes = zlib.decompress(decoded_bytes)  # standard zlib
         return urllib.parse.unquote(xml_bytes.decode("utf-8"))
     except Exception:
         return None
@@ -68,9 +70,7 @@ def read_drawio_bytes(path: str) -> bytes:
             if not xml_names:
                 xml_names = names[:1] if names else []
             if not xml_names:
-                raise ValueError(
-                    f"No XML entry found in zip archive. Contents: {names}"
-                )
+                raise ValueError(f"No XML entry found in zip archive. Contents: {names}")
             return zf.read(xml_names[0])
 
     return raw
@@ -79,6 +79,7 @@ def read_drawio_bytes(path: str) -> bytes:
 # ---------------------------------------------------------------------------
 # Internal: draw.io discovery
 # ---------------------------------------------------------------------------
+
 
 def find_drawio() -> list[str] | None:
     """Return the command prefix to invoke draw.io headlessly, or None.
@@ -95,7 +96,8 @@ def find_drawio() -> list[str] | None:
                 try:
                     res = subprocess.run(
                         ["flatpak", "info", "com.jgraph.drawio.desktop"],
-                        capture_output=True, timeout=5,
+                        capture_output=True,
+                        timeout=5,
                     )
                     if res.returncode == 0:
                         return ["flatpak", "run", "--filesystem=host", "--filesystem=/tmp", "com.jgraph.drawio.desktop"]
@@ -125,12 +127,15 @@ def find_drawio() -> list[str] | None:
         try:
             result = subprocess.run(
                 ["flatpak", "info", "com.jgraph.drawio.desktop"],
-                capture_output=True, timeout=5,
+                capture_output=True,
+                timeout=5,
             )
             if result.returncode == 0:
                 return [
-                    "flatpak", "run",
-                    "--filesystem=host", "--filesystem=/tmp",
+                    "flatpak",
+                    "run",
+                    "--filesystem=host",
+                    "--filesystem=/tmp",
                     "com.jgraph.drawio.desktop",
                 ]
         except Exception:
@@ -149,10 +154,7 @@ def _drawio_not_found_error() -> str:
                 "Update the variable to point at the draw.io executable."
             )
         if not os.access(override, os.X_OK):
-            return (
-                f"CREPE_DRAWIO_PATH is set to {override!r} but the file is not executable. "
-                "Run: chmod +x " + override
-            )
+            return f"CREPE_DRAWIO_PATH is set to {override!r} but the file is not executable. Run: chmod +x " + override
     return (
         "draw.io not found. Install it natively (e.g. via your package manager "
         "or https://github.com/jgraph/drawio-desktop/releases), via the macOS "
@@ -226,9 +228,12 @@ def export_drawio(
 
     cmd = cmd_prefix + [
         "--export",
-        "--format", output_format,
-        "--output", output_path,
-        "--border", str(border),
+        "--format",
+        output_format,
+        "--output",
+        output_path,
+        "--border",
+        str(border),
     ]
     if all_pages:
         cmd.append("--all-pages")
@@ -277,6 +282,7 @@ def export_drawio(
 # Public: list pages and structural XML validation
 # ---------------------------------------------------------------------------
 
+
 def _check_graph_model(model_elem: ET.Element, page_desc: str, warnings: list[str]) -> None:
     root_elem = model_elem.find("root")
     if root_elem is None:
@@ -303,9 +309,9 @@ def _check_graph_model(model_elem: ET.Element, page_desc: str, warnings: list[st
             has_root_1 = True
 
     if not has_root_0:
-        warnings.append(f"{page_desc}: Missing base root cell <mxCell id=\"0\"/>.")
+        warnings.append(f'{page_desc}: Missing base root cell <mxCell id="0"/>.')
     if not has_root_1:
-        warnings.append(f"{page_desc}: Missing default layer cell <mxCell id=\"1\" parent=\"0\"/>.")
+        warnings.append(f'{page_desc}: Missing default layer cell <mxCell id="1" parent="0"/>.')
 
 
 def inspect_drawio(input_path: str) -> dict:

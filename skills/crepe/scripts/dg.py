@@ -20,6 +20,7 @@ Usage (Python):
 
 Styles are named palettes (see PALETTE) or raw draw.io style strings.
 """
+
 import sys
 from pathlib import Path
 from xml.sax.saxutils import escape
@@ -50,44 +51,66 @@ class Diagram:
         self.n += 1
         return f"c{self.n}"
 
-    def box(self, label, x, y, w, h, style="grey", size=12, bold=False,
-            rounded=True, align="center", valign="middle", extra=""):
+    def box(
+        self,
+        label,
+        x,
+        y,
+        w,
+        h,
+        style="grey",
+        size=12,
+        bold=False,
+        rounded=True,
+        align="center",
+        valign="middle",
+        extra="",
+    ):
         cid = self._id()
         st = PALETTE.get(style, style)
-        st += (f"rounded={1 if rounded else 0};whiteSpace=wrap;html=1;{FONT}"
-               f"fontSize={size};align={align};verticalAlign={valign};"
-               f"fontStyle={1 if bold else 0};arcSize=8;spacing=6;{extra}")
+        st += (
+            f"rounded={1 if rounded else 0};whiteSpace=wrap;html=1;{FONT}"
+            f"fontSize={size};align={align};verticalAlign={valign};"
+            f"fontStyle={1 if bold else 0};arcSize=8;spacing=6;{extra}"
+        )
         self.cells.append(
             f'<mxCell id="{cid}" value="{escape(label, {chr(34): "&quot;"})}" '
             f'style="{st}" vertex="1" parent="1">'
-            f'<mxGeometry x="{x}" y="{y}" width="{w}" height="{h}" as="geometry"/></mxCell>')
+            f'<mxGeometry x="{x}" y="{y}" width="{w}" height="{h}" as="geometry"/></mxCell>'
+        )
         return cid
 
     def text(self, label, x, y, w, h, size=12, bold=False, align="center", color="#333333"):
-        return self.box(label, x, y, w, h, "none", size, bold, False, align,
-                        extra=f"fontColor={color};")
+        return self.box(label, x, y, w, h, "none", size, bold, False, align, extra=f"fontColor={color};")
 
-    def edge(self, src, dst, label="", dashed=False, color="#555555", size=11,
-             exit_=None, entry=None, both=False, width=1.5):
+    def edge(
+        self, src, dst, label="", dashed=False, color="#555555", size=11, exit_=None, entry=None, both=False, width=1.5
+    ):
         cid = self._id()
-        st = (f"edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;{FONT}fontSize={size};"
-              f"strokeColor={color};strokeWidth={width};endArrow=block;endFill=1;"
-              f"{'dashed=1;' if dashed else ''}{'startArrow=block;startFill=1;' if both else ''}")
+        st = (
+            f"edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;{FONT}fontSize={size};"
+            f"strokeColor={color};strokeWidth={width};endArrow=block;endFill=1;"
+            f"{'dashed=1;' if dashed else ''}{'startArrow=block;startFill=1;' if both else ''}"
+        )
         if exit_:
             st += f"exitX={exit_[0]};exitY={exit_[1]};exitDx=0;exitDy=0;"
         if entry:
             st += f"entryX={entry[0]};entryY={entry[1]};entryDx=0;entryDy=0;"
         self.cells.append(
             f'<mxCell id="{cid}" value="{escape(label)}" style="{st}" edge="1" parent="1" '
-            f'source="{src}" target="{dst}"><mxGeometry relative="1" as="geometry"/></mxCell>')
+            f'source="{src}" target="{dst}"><mxGeometry relative="1" as="geometry"/></mxCell>'
+        )
         return cid
 
     def save(self, path):
-        xml = (f'<mxfile host="dg.py"><diagram id="{self.name}" name="{self.name}">'
-               f'<mxGraphModel dx="{self.w}" dy="{self.h}" grid="0" gridSize="10" page="1" '
-               f'pageWidth="{self.w}" pageHeight="{self.h}" math="0" shadow="0"><root>'
-               '<mxCell id="0"/><mxCell id="1" parent="0"/>'
-               + "".join(self.cells) + "</root></mxGraphModel></diagram></mxfile>")
+        xml = (
+            f'<mxfile host="dg.py"><diagram id="{self.name}" name="{self.name}">'
+            f'<mxGraphModel dx="{self.w}" dy="{self.h}" grid="0" gridSize="10" page="1" '
+            f'pageWidth="{self.w}" pageHeight="{self.h}" math="0" shadow="0"><root>'
+            '<mxCell id="0"/><mxCell id="1" parent="0"/>'
+            + "".join(self.cells)
+            + "</root></mxGraphModel></diagram></mxfile>"
+        )
         with open(path, "w", encoding="utf-8") as f:
             f.write(xml)
         return path

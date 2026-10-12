@@ -2,6 +2,7 @@
 
 Run with: python -m unittest discover -s tests -p "test_perf.py" -v
 """
+
 import hashlib
 import os
 import random
@@ -34,8 +35,24 @@ def dump(doc_store_: DocumentStore) -> dict[str, str]:
 
 
 def make_line(i: int, column: int, y0: float, height: float) -> Line:
-    return Line(id=i, page=1, seq=i, region="body", column=column, x0=0.0, y0=y0, x1=10.0, y1=y0 + height,
-                text="x", font="f", size=10.0, bold=False, italic=False, mono=False, color=0)
+    return Line(
+        id=i,
+        page=1,
+        seq=i,
+        region="body",
+        column=column,
+        x0=0.0,
+        y0=y0,
+        x1=10.0,
+        y1=y0 + height,
+        text="x",
+        font="f",
+        size=10.0,
+        bold=False,
+        italic=False,
+        mono=False,
+        color=0,
+    )
 
 
 class FakeClock:
@@ -74,13 +91,20 @@ def hung_worker_class(clock: FakeClock, waits: list[float]):
 class TestRowIndex(unittest.TestCase):
     def test_matches_the_scan_it_replaces(self):
         rng = random.Random(7)
-        lines = [make_line(i, rng.randint(0, 2), round(rng.uniform(0, 400), 1), rng.choice([8.0, 10.0, 12.0]))
-                 for i in range(300)]
+        lines = [
+            make_line(i, rng.randint(0, 2), round(rng.uniform(0, 400), 1), rng.choice([8.0, 10.0, 12.0]))
+            for i in range(300)
+        ]
         index = _RowIndex(lines)
         for tolerance in (0.0, 2.5, 5.0, 17.0):
             for line in lines:
-                expected = {other.id for other in lines if other.id != line.id and other.column == line.column
-                            and abs(_centre(other) - _centre(line)) <= tolerance}
+                expected = {
+                    other.id
+                    for other in lines
+                    if other.id != line.id
+                    and other.column == line.column
+                    and abs(_centre(other) - _centre(line)) <= tolerance
+                }
                 self.assertEqual({m.id for m in index.mates(line, tolerance)}, expected)
 
     def test_boundary_values_are_inclusive_like_the_scan(self):
@@ -95,9 +119,11 @@ class TestParallelGeometry(IsolatedTestCase):
         path = build_fixture(name, self.tmp_path / name)
         scratch = {"CREPE_SCRATCH_BASE": str(self.tmp_path / f"scratch-{name}-{threshold}")}
         real_popen = assets_module.subprocess.Popen
-        with mock.patch.dict(os.environ, scratch), \
-                mock.patch.object(assets_module, "PARALLEL_MIN_TABLE_PAGES", threshold), \
-                mock.patch.object(assets_module.subprocess, "Popen", wraps=real_popen) as popen:
+        with (
+            mock.patch.dict(os.environ, scratch),
+            mock.patch.object(assets_module, "PARALLEL_MIN_TABLE_PAGES", threshold),
+            mock.patch.object(assets_module.subprocess, "Popen", wraps=real_popen) as popen,
+        ):
             result = dump(DocumentStore.open(path))
         close_all()
         return result, popen.call_count
@@ -116,7 +142,6 @@ class TestParallelGeometry(IsolatedTestCase):
             fallback, _ = self.build_dump("em_long_review", 2)
         self.assertEqual(fallback, plain)
 
-
     def test_an_unreadable_worker_output_falls_back_to_the_parent(self):
         plain, _ = self.build_dump("em_long_review", 10**6)
         with mock.patch.object(assets_module.pickle, "loads", side_effect=EOFError("truncated")):
@@ -126,13 +151,16 @@ class TestParallelGeometry(IsolatedTestCase):
 
     def test_hung_workers_share_one_deadline(self):
         clock, waits = FakeClock(), []
-        with mock.patch.object(assets_module, "WORKER_TIMEOUT", 10), \
-                mock.patch.object(assets_module, "monotonic", clock), \
-                mock.patch.object(assets_module.os, "cpu_count", return_value=4), \
-                mock.patch.object(assets_module.subprocess, "Popen", hung_worker_class(clock, waits)):
+        with (
+            mock.patch.object(assets_module, "WORKER_TIMEOUT", 10),
+            mock.patch.object(assets_module, "monotonic", clock),
+            mock.patch.object(assets_module.os, "cpu_count", return_value=4),
+            mock.patch.object(assets_module.subprocess, "Popen", hung_worker_class(clock, waits)),
+        ):
             numbers = [1, 2, 3, 4]
             found = assets_module._geometries_in_workers(
-                Path("unused.pdf"), numbers, {n: n for n in numbers}, None, {n: (0.0, 0.0) for n in numbers})
+                Path("unused.pdf"), numbers, {n: n for n in numbers}, None, {n: (0.0, 0.0) for n in numbers}
+            )
         self.assertEqual(found, {})
         self.assertEqual(len(waits), 4)
         self.assertLessEqual(sum(waits), 10)
@@ -158,8 +186,9 @@ class TestParallelLint(unittest.TestCase):
         for i, body in enumerate(self.BODIES):
             if i == 3:
                 expected.append(("missing_title", i))
-            expected += [(x.type, x.slide_index) for x in linter._check_markdown(body, workdir=pres.workdir,
-                                                                                  slide_index=i)]
+            expected += [
+                (x.type, x.slide_index) for x in linter._check_markdown(body, workdir=pres.workdir, slide_index=i)
+            ]
         self.assertEqual([(x.type, x.slide_index) for x in report.issues], expected)
         self.assertGreaterEqual(len(expected), 4)
         store.delete_presentation(pres.id)
@@ -201,10 +230,12 @@ class TestParallelRender(unittest.TestCase):
 
     def test_hung_workers_share_one_deadline(self):
         clock, waits = FakeClock(), []
-        with mock.patch.object(exporter, "RENDER_WORKER_TIMEOUT", 10), \
-                mock.patch.object(exporter, "monotonic", clock), \
-                mock.patch.object(exporter.os, "cpu_count", return_value=4), \
-                mock.patch.object(exporter.subprocess, "Popen", hung_worker_class(clock, waits)):
+        with (
+            mock.patch.object(exporter, "RENDER_WORKER_TIMEOUT", 10),
+            mock.patch.object(exporter, "monotonic", clock),
+            mock.patch.object(exporter.os, "cpu_count", return_value=4),
+            mock.patch.object(exporter.subprocess, "Popen", hung_worker_class(clock, waits)),
+        ):
             ok = exporter._render_in_workers("unused.pdf", "unused", 40, 8)
         self.assertFalse(ok)
         self.assertEqual(len(waits), 4)

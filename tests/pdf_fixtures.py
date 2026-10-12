@@ -35,11 +35,21 @@ SENTENCES = [
     "Ablation experiments isolate the contribution of each component of the pipeline.",
     "Limitations include the size of the evaluation corpus and the tuning budget.",
 ]
-AUTHORS = ["A. Author and B. Author", "C. Writer", "D. Scholar, E. Analyst and F. Critic", "G. Tester and H. Maker",
-           "I. Reader"]
-TITLES = ["Representative selection at scale", "Learned similarity for page layouts",
-          "Clustering under costly distances", "Coverage sampling heuristics", "Evaluation of medoid methods",
-          "Graph matching networks"]
+AUTHORS = [
+    "A. Author and B. Author",
+    "C. Writer",
+    "D. Scholar, E. Analyst and F. Critic",
+    "G. Tester and H. Maker",
+    "I. Reader",
+]
+TITLES = [
+    "Representative selection at scale",
+    "Learned similarity for page layouts",
+    "Clustering under costly distances",
+    "Coverage sampling heuristics",
+    "Evaluation of medoid methods",
+    "Graph matching networks",
+]
 VENUES = ["Journal of Examples", "Transactions on Samples", "Letters in Fixtures", "Proceedings of Tests"]
 
 
@@ -48,8 +58,10 @@ def filler(seed: int, count: int = 2) -> str:
 
 
 def reference_entry(k: int) -> str:
-    return (f'[{k}] {AUTHORS[k % len(AUTHORS)]}, "{TITLES[k % len(TITLES)]}," {VENUES[k % len(VENUES)]}, '
-            f"vol. {k}, pp. 1-10, 2024.")
+    return (
+        f'[{k}] {AUTHORS[k % len(AUTHORS)]}, "{TITLES[k % len(TITLES)]}," {VENUES[k % len(VENUES)]}, '
+        f"vol. {k}, pp. 1-10, 2024."
+    )
 
 
 @dataclass(frozen=True)
@@ -162,8 +174,12 @@ class PaperBuilder:
         pix.set_rect(pix.irect, (90, 140, 200))
         self.page.insert_image(rect, pixmap=pix, keep_proportion=False)
         if inner_text:
-            self.page.insert_text((rect.x0 + 4 * self.scale, rect.y1 - 4 * self.scale), inner_text,
-                                  fontsize=7 * self.scale, fontname="helv")
+            self.page.insert_text(
+                (rect.x0 + 4 * self.scale, rect.y1 - 4 * self.scale),
+                inner_text,
+                fontsize=7 * self.scale,
+                fontname="helv",
+            )
         self.y += height + 6 * self.scale
         self.paragraph(f"{label} {caption}", size=8)
 
@@ -249,8 +265,9 @@ class PaperBuilder:
                     y = self.body_top + 10 * self.scale + step * k
                     page.insert_text((0.027 * self.width, y), str(k + 1), fontsize=8 * self.scale, fontname="tiro")
                     if self.page_columns[index] == 2:
-                        page.insert_text((self.width - 0.04 * self.width, y), str(k + 1), fontsize=8 * self.scale,
-                                         fontname="tiro")
+                        page.insert_text(
+                            (self.width - 0.04 * self.width, y), str(k + 1), fontsize=8 * self.scale, fontname="tiro"
+                        )
         self.doc.set_metadata({"producer": "reviewer-mcp fixture", "creator": "reviewer-mcp fixture"})
         path.parent.mkdir(parents=True, exist_ok=True)
         self.doc.save(str(path))
@@ -294,11 +311,28 @@ ELSEVIER = Style(
 )
 SECTIONS = ["Introduction", "Related Work", "Proposed Method", "Experiments", "Conclusion"]
 EQUATION_1 = [
-    ("f", "italic"), ("(", "normal"), ("x", "italic"), (") = ", "normal"), ("Σ", "symbol"),
-    ("i", "sub"), ("w", "italic"), ("i", "sub"), ("x", "italic"), ("i", "sub"), ("2", "sup"),
+    ("f", "italic"),
+    ("(", "normal"),
+    ("x", "italic"),
+    (") = ", "normal"),
+    ("Σ", "symbol"),
+    ("i", "sub"),
+    ("w", "italic"),
+    ("i", "sub"),
+    ("x", "italic"),
+    ("i", "sub"),
+    ("2", "sup"),
 ]
-EQUATION_2 = [("r", "italic"), ("(", "normal"), ("θ", "symbol"), (") = 1 - ", "normal"), ("n", "italic"),
-              ("θ", "sub"), (" / ", "normal"), ("N", "italic")]
+EQUATION_2 = [
+    ("r", "italic"),
+    ("(", "normal"),
+    ("θ", "symbol"),
+    (") = 1 - ", "normal"),
+    ("n", "italic"),
+    ("θ", "sub"),
+    (" / ", "normal"),
+    ("N", "italic"),
+]
 
 
 def write_manuscript(
@@ -351,22 +385,33 @@ def write_manuscript(
             b.equation(EQUATION_2, 2)
         elif i == 3:
             b.paragraph(f"{style.table_ref(1)} lists the datasets used in the evaluation [3].", color=color)
-            b.table(style.table(1), "Datasets and parameters.",
-                    [["Dataset", "Items", "Features"], ["A", "1200", "16"], ["B", "5400", "32"]])
+            b.table(
+                style.table(1),
+                "Datasets and parameters.",
+                [["Dataset", "Items", "Features"], ["A", "1200", "16"], ["B", "5400", "32"]],
+            )
         elif i == 4:
             b.paragraph("Algorithm 1 details the incremental procedure [4].", color=color)
-            b.algorithm("Algorithm 1", "Incremental coverage",
-                        ["R <- X", "while |R| > m do", "select representatives", "end while"])
+            b.algorithm(
+                "Algorithm 1",
+                "Incremental coverage",
+                ["R <- X", "while |R| > m do", "select representatives", "end while"],
+            )
         elif i == 5:
             b.paragraph(f"{style.figure_ref(2)} reports the runtime of all methods [5].", color=color)
             b.figure(style.figure(2), "Runtime versus dataset size.", inner_text="Time (s)")
         elif i == 6:
             b.figure(style.figure(3), "Example figure that the text never cites.")
         if references_table_page is not None and i == references_table_page:
-            b.table(style.table(2), "Classification of the reviewed studies.",
-                    [["Modeling", "Solution", "References"],
-                     ["MILP", "Heuristic", "[3], [4]"],
-                     ["Stochastic", "Exact", "[5]"]])
+            b.table(
+                style.table(2),
+                "Classification of the reviewed studies.",
+                [
+                    ["Modeling", "Solution", "References"],
+                    ["MILP", "Heuristic", "[3], [4]"],
+                    ["Stochastic", "Exact", "[5]"],
+                ],
+            )
 
 
 def write_letter(b: PaperBuilder, pages: int, item_label: str = "Letter") -> None:
@@ -434,8 +479,9 @@ def build_ieee_single(path: Path, scale: float = 1.0, paper: str = "a4") -> Path
     b.paragraph("All files submitted by the author for peer review are listed below.")
     b.set_marks(headers=("Page {page} of {pages}",), footers=("VOLUME 11, 2023",))
     b.set_line_numbers(True)
-    write_manuscript(b, 14, IEEE, "Scalable Selection of Representative Items in Learned Similarity Spaces",
-                     template_footnote=True)
+    write_manuscript(
+        b, 14, IEEE, "Scalable Selection of Representative Items in Learned Similarity Spaces", template_footnote=True
+    )
     return b.save(path)
 
 
@@ -448,10 +494,12 @@ def build_em_long_review(path: Path, scale: float = 1.0, paper: str = "a4") -> P
     b.line("Highlights", size=9, font="helv")
     b.paragraph("Unified formulation of scheduled service network design. Classification of 106 studies.")
     write_letter(b, 3)
-    write_responses(b, 9, (1, 2), heading="Review Response Letter", item_label="Response to reviewers",
-                    reference_page=True)
-    write_manuscript(b, 78, ELSEVIER, title, reference_pages=16, item_label="Response to reviewers",
-                     references_table_page=29)
+    write_responses(
+        b, 9, (1, 2), heading="Review Response Letter", item_label="Response to reviewers", reference_page=True
+    )
+    write_manuscript(
+        b, 78, ELSEVIER, title, reference_pages=16, item_label="Response to reviewers", references_table_page=29
+    )
     b.new_page()
     return b.save(path)
 
@@ -461,8 +509,9 @@ def build_em_revision(path: Path, scale: float = 1.0, paper: str = "a4") -> Path
     title = "Mechanism-Guided Framework for Multi-Fault Diagnosis of Battery Systems"
     b = PaperBuilder(scale, paper)
     em_cover(b, "Journal of Industrial Information Integration", title, "JII-D-26-00002R2", "Research Paper")
-    write_manuscript(b, 36, ELSEVIER, title, reference_pages=5,
-                     item_label="Revised manuscript without author details (unmarked)")
+    write_manuscript(
+        b, 36, ELSEVIER, title, reference_pages=5, item_label="Revised manuscript without author details (unmarked)"
+    )
     write_responses(b, 21, (1, 6, 7, 8), heading="Response to Reviewers' Comments", item_label="Response to reviewers")
     b.new_page()
     return b.save(path)
@@ -509,32 +558,78 @@ EM_REVISION_PARTS = (("cover", 1, 1), ("manuscript", 2, 37), ("responses", 38, 5
 
 FIXTURES: dict[str, FixtureSpec] = {
     "ieee_single": FixtureSpec(
-        "ieee_single", "Access-2026-00001_Proof_hi.pdf", 17, "ieee_access", "first", IEEE_PARTS, (4, 17),
+        "ieee_single",
+        "Access-2026-00001_Proof_hi.pdf",
+        17,
+        "ieee_access",
+        "first",
+        IEEE_PARTS,
+        (4, 17),
     ),
     "ieee_single_8pt_letter": FixtureSpec(
-        "ieee_single_8pt_letter", "Access-2026-00002_Proof_hi.pdf", 17, "ieee_access", "first", IEEE_PARTS, (4, 17),
+        "ieee_single_8pt_letter",
+        "Access-2026-00002_Proof_hi.pdf",
+        17,
+        "ieee_access",
+        "first",
+        IEEE_PARTS,
+        (4, 17),
     ),
     "ieee_single_12pt": FixtureSpec(
-        "ieee_single_12pt", "Access-2026-00003_Proof_hi.pdf", 17, "ieee_access", "first", IEEE_PARTS, (4, 17),
+        "ieee_single_12pt",
+        "Access-2026-00003_Proof_hi.pdf",
+        17,
+        "ieee_access",
+        "first",
+        IEEE_PARTS,
+        (4, 17),
     ),
     "em_long_review": FixtureSpec(
-        "em_long_review", "JII-D-26-00001_R2_reviewer.pdf", 93, "elsevier_jii", "revision",
-        (("cover", 1, 1), ("other", 2, 2), ("letter", 3, 5), ("responses", 6, 14), ("manuscript", 15, 92),
-         ("other", 93, 93)),
-        (15, 92), (1, 2),
+        "em_long_review",
+        "JII-D-26-00001_R2_reviewer.pdf",
+        93,
+        "elsevier_jii",
+        "revision",
+        (
+            ("cover", 1, 1),
+            ("other", 2, 2),
+            ("letter", 3, 5),
+            ("responses", 6, 14),
+            ("manuscript", 15, 92),
+            ("other", 93, 93),
+        ),
+        (15, 92),
+        (1, 2),
     ),
     "em_revision": FixtureSpec(
-        "em_revision", "JII-D-26-00002_R2_reviewer.pdf", 59, "elsevier_jii", "revision", EM_REVISION_PARTS,
-        (2, 37), (1, 6, 7, 8),
+        "em_revision",
+        "JII-D-26-00002_R2_reviewer.pdf",
+        59,
+        "elsevier_jii",
+        "revision",
+        EM_REVISION_PARTS,
+        (2, 37),
+        (1, 6, 7, 8),
     ),
     "em_revision_12pt": FixtureSpec(
-        "em_revision_12pt", "JII-D-26-00003_R2_reviewer.pdf", 59, "elsevier_jii", "revision", EM_REVISION_PARTS,
-        (2, 37), (1, 6, 7, 8),
+        "em_revision_12pt",
+        "JII-D-26-00003_R2_reviewer.pdf",
+        59,
+        "elsevier_jii",
+        "revision",
+        EM_REVISION_PARTS,
+        (2, 37),
+        (1, 6, 7, 8),
     ),
     "scholarone_two_copies": FixtureSpec(
-        "scholarone_two_copies", "TMLCN-03-26-0001.R2_Proof_hi.pdf", 56, "ieee_tmlcn", "revision",
+        "scholarone_two_copies",
+        "TMLCN-03-26-0001.R2_Proof_hi.pdf",
+        56,
+        "ieee_tmlcn",
+        "revision",
         (("cover", 1, 3), ("manuscript", 4, 23), ("manuscript", 24, 43), ("responses", 44, 55), ("other", 56, 56)),
-        (4, 23), (2, 3, 4),
+        (4, 23),
+        (2, 3, 4),
     ),
     "scanned": FixtureSpec("scanned", "scanned_submission.pdf", 1, "", "", (("other", 1, 1),), None),
 }

@@ -299,7 +299,8 @@ PYTHONPATH=src venv/bin/python -m unittest discover -s tests
 pre-commit install                                   # hooks mirror CI
 ```
 
-- ruff, basedpyright, vulture and pre-commit run from the system install; CI pins the same versions as `.github/workflows/main.yml`.
+- ruff (`ruff check .` and `ruff format --check .`), basedpyright, vulture and pre-commit run from the system install; CI pins the same versions as `.github/workflows/main.yml`. Run `ruff format .` before committing.
+- The sdist carries `setup.py` and `skills/`, so an unpacked sdist installs the servers and the skill like a clone; the wheel holds only the Python package and the `crepe-*` commands.
 - The pre-commit hook `venv matches CI` reinstalls the package into `./venv` (non-editable) before the checks, so the servers always run the code that passed them. Coverage has a floor that only goes up.
 - `skills/crepe/` is the agent skill (Agent Skills format); `./setup.py --install` copies it to `~/.agents/skills/crepe/` and `--uninstall` removes it. `tests/agent_prompts/` holds smoke-test prompts for it. The repo's `.agents/` folder is local agent state (plans, local MCP configs) and is git-ignored.
 

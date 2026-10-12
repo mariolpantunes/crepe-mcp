@@ -51,40 +51,58 @@ class TestParagraphsAndSections(IsolatedTestCase):
     def test_paragraph_rules(self):
         store = DocumentStore.open(paragraph_pdf(self.tmp_path / "paragraphs.pdf"))
         rows = [(p["kind"], p["text"], p["page"], p["last_page"]) for p in store.paragraphs()]
-        self.assertEqual(rows, [
-            ("heading", "1 Introduction", 1, 1),
-            ("text", "The first paragraph starts here and it continues on the next line of the same paragraph.", 1, 1),
-            ("text", "Second paragraph begins after a first-line indent. It also has a second line without an indent.",
-             1, 1),
-            ("caption", "Figure 1: A caption line in small type.", 1, 1),
-            ("text", "This sentence goes on across the page break and ends here.", 1, 2),
-        ])
+        self.assertEqual(
+            rows,
+            [
+                ("heading", "1 Introduction", 1, 1),
+                (
+                    "text",
+                    "The first paragraph starts here and it continues on the next line of the same paragraph.",
+                    1,
+                    1,
+                ),
+                (
+                    "text",
+                    "Second paragraph begins after a first-line indent. It also has a second line without an indent.",
+                    1,
+                    1,
+                ),
+                ("caption", "Figure 1: A caption line in small type.", 1, 1),
+                ("text", "This sentence goes on across the page break and ends here.", 1, 2),
+            ],
+        )
         self.assertEqual(outline_rows(store), [(1, "1", "Introduction", 1)])
 
     def test_ieee_outline(self):
         store = DocumentStore.open(build_fixture("ieee_single", self.tmp_path))
-        self.assertEqual(outline_rows(store), [
-            (1, "", "Abstract", 4),
-            (1, "I", "INTRODUCTION", 4),
-            (1, "II", "RELATED WORK", 7),
-            (1, "III", "PROPOSED METHOD", 9),
-            (1, "IV", "EXPERIMENTS", 12),
-            (1, "V", "CONCLUSION", 14),
-            (1, "", "REFERENCES", 16),
-        ])
+        self.assertEqual(
+            outline_rows(store),
+            [
+                (1, "", "Abstract", 4),
+                (1, "I", "INTRODUCTION", 4),
+                (1, "II", "RELATED WORK", 7),
+                (1, "III", "PROPOSED METHOD", 9),
+                (1, "IV", "EXPERIMENTS", 12),
+                (1, "V", "CONCLUSION", 14),
+                (1, "", "REFERENCES", 16),
+            ],
+        )
 
     def test_elsevier_outline_includes_cover_abstract(self):
         store = DocumentStore.open(build_fixture("em_revision", self.tmp_path))
-        self.assertEqual(outline_rows(store), [
-            (1, "", "Abstract", 1),
-            (1, "", "Abstract", 2),
-            (1, "1", "Introduction", 2),
-            (1, "2", "Related Work", 9),
-            (1, "3", "Proposed Method", 15),
-            (1, "4", "Experiments", 21),
-            (1, "5", "Conclusion", 27),
-            (1, "", "References", 33),
-        ])
+        self.assertEqual(
+            outline_rows(store),
+            [
+                (1, "", "Abstract", 1),
+                (1, "", "Abstract", 2),
+                (1, "1", "Introduction", 2),
+                (1, "2", "Related Work", 9),
+                (1, "3", "Proposed Method", 15),
+                (1, "4", "Experiments", 21),
+                (1, "5", "Conclusion", 27),
+                (1, "", "References", 33),
+            ],
+        )
 
     def test_section_paragraphs(self):
         store = DocumentStore.open(build_fixture("ieee_single", self.tmp_path))
@@ -123,8 +141,9 @@ class TestRealAccessIndexes(IsolatedTestCase):
         self.assertEqual(levels.count((2, True)), 9, outline)
         self.assertEqual(levels.count((3, True)), 5, outline)
         self.assertEqual(levels.count((1, False)), 2, outline)
-        self.assertEqual([s["number"] for s in outline if s["level"] == 1 and s["number"]],
-                         ["I", "II", "III", "IV", "V", "VI"])
+        self.assertEqual(
+            [s["number"] for s in outline if s["level"] == 1 and s["number"]], ["I", "II", "III", "IV", "V", "VI"]
+        )
         self.assertTrue(all(4 <= s["page"] <= 16 for s in outline))
         self.assertGreater(len(store.paragraphs()), 100)
         self.assertGreater(store.search("Fig")[0], 0)

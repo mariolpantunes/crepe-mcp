@@ -10,6 +10,7 @@ Tools
 Group E (4):
   create_excel, inspect_excel, update_excel_sheet, markdown_table_to_excel
 """
+
 from __future__ import annotations
 
 from fastmcp import FastMCP
@@ -42,6 +43,7 @@ def spreadsheet_model_prompt(
         "3. Call create_excel(output_path=..., sheets=[...]) to generate the workbook.\n"
         "4. Validate workbook layout with inspect_excel()."
     )
+
 
 @mcp.tool
 def create_excel(
@@ -98,6 +100,7 @@ def markdown_table_to_excel(
 ) -> dict:
     """Convert a GitHub Flavored Markdown table string into a styled Excel workbook."""
     return _excel.markdown_table_to_excel(markdown_table=markdown_table, output_path=output_path, sheet_name=sheet_name)
+
 
 def main() -> None:
     """Console-script entrypoint for the standalone crepe-spreadsheets server."""

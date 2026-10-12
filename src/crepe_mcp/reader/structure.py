@@ -106,9 +106,12 @@ def _cover_lines(page: Page) -> list[str]:
         match = COVER_FIELD_RE.search(text)
         if not match:
             continue
-        if match.start() == 0 and not text[match.end():].strip(" :\t-"):
-            row = [other for other in body if other is not line and other.x0 >= line.x1
-                   and line.y0 <= (other.y0 + other.y1) / 2 <= line.y1]
+        if match.start() == 0 and not text[match.end() :].strip(" :\t-"):
+            row = [
+                other
+                for other in body
+                if other is not line and other.x0 >= line.x1 and line.y0 <= (other.y0 + other.y1) / 2 <= line.y1
+            ]
             text = " ".join([text, *(other.text.strip() for other in sorted(row, key=lambda other: other.x0))])
         fields.append(text)
     return fields
@@ -133,8 +136,9 @@ def _signals(page: Page, metrics: Metrics, cells: set[int]) -> _Signals:
         cover_lines=_cover_lines(page),
         responses=heading or exchange,
         letter=next((t for t in rest if LETTER_RE.match(t)), ""),
-        start=next((line.text.strip() for line in rest_lines
-                    if START_RE.match(line.text.strip())), "") if typeset else "",
+        start=next((line.text.strip() for line in rest_lines if START_RE.match(line.text.strip())), "")
+        if typeset
+        else "",
         coloured_chars=sum(len(line.text) for line in page.body_lines() if _coloured(line)),
         markup_annots=page.markup_annots,
     )
@@ -214,8 +218,16 @@ def build_structure(pdf_path: Path, pages: list[Page], sections: list[Section], 
     round_status, round_label, round_confidence, round_evidence = _review_round(
         pdf_path, pages, segments, signals, current_id
     )
-    return Structure(segments, current_id, current_confidence, current_evidence,
-                     round_status, round_label, round_confidence, round_evidence)
+    return Structure(
+        segments,
+        current_id,
+        current_confidence,
+        current_evidence,
+        round_status,
+        round_label,
+        round_confidence,
+        round_evidence,
+    )
 
 
 def _current_manuscript(segments: list[Segment], signals: dict[int, _Signals]) -> tuple[int, str, list[str]]:

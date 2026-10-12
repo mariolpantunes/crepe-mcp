@@ -7,10 +7,25 @@ from pathlib import Path
 
 #: Formats read through pandoc's AST; PDF has its own extractor.
 PANDOC_FORMATS: dict[str, str] = {
-    ".docx": "docx", ".odt": "odt", ".rtf": "rtf", ".epub": "epub", ".html": "html", ".htm": "html",
-    ".tex": "latex", ".rst": "rst", ".md": "markdown", ".markdown": "markdown", ".txt": "markdown",
-    ".org": "org", ".ipynb": "ipynb", ".pptx": "pptx", ".xlsx": "xlsx", ".csv": "csv", ".tsv": "tsv",
-    ".fb2": "fb2", ".xml": "jats",
+    ".docx": "docx",
+    ".odt": "odt",
+    ".rtf": "rtf",
+    ".epub": "epub",
+    ".html": "html",
+    ".htm": "html",
+    ".tex": "latex",
+    ".rst": "rst",
+    ".md": "markdown",
+    ".markdown": "markdown",
+    ".txt": "markdown",
+    ".org": "org",
+    ".ipynb": "ipynb",
+    ".pptx": "pptx",
+    ".xlsx": "xlsx",
+    ".csv": "csv",
+    ".tsv": "tsv",
+    ".fb2": "fb2",
+    ".xml": "jats",
 }
 SUPPORTED = (".pdf", *PANDOC_FORMATS)
 ROOTS_VAR = "CREPE_READER_ROOTS"

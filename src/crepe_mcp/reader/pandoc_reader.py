@@ -201,8 +201,9 @@ class _Walker:
         self.counts[kind] = self.counts.get(kind, 0) + 1
         return str(self.counts[kind])
 
-    def asset(self, kind: str, caption: str, content: str, content_format: str, paragraph: int, explicit: str | None
-              ) -> None:
+    def asset(
+        self, kind: str, caption: str, content: str, content_format: str, paragraph: int, explicit: str | None
+    ) -> None:
         number = self.next_number(kind, explicit)
         self.assets.append(_Asset(f"{kind}:{number}", kind, number, caption, content, content_format, paragraph))
 
@@ -217,8 +218,14 @@ class _Walker:
         parent = self.stack[-1][1] if self.stack else 0
         para = self.add("heading", text, level)
         self.sections.append(
-            {"id": para.section, "parent": parent, "level": level, "number": number, "title": title,
-             "paragraph": para.id}
+            {
+                "id": para.section,
+                "parent": parent,
+                "level": level,
+                "number": number,
+                "title": title,
+                "paragraph": para.id,
+            }
         )
         self.stack.append((level, para.section))
 
@@ -293,12 +300,20 @@ class _Walker:
 
     def figure(self, content: list[Any]) -> None:
         caption, explicit = self.caption_parts(content[1], "figure")
-        url = next((n["c"][2][0] for b in content[2] for n in (b.get("c") or []) if isinstance(n, dict)
-                    and n.get("t") == "Image"), "")
+        url = next(
+            (
+                n["c"][2][0]
+                for b in content[2]
+                for n in (b.get("c") or [])
+                if isinstance(n, dict) and n.get("t") == "Image"
+            ),
+            "",
+        )
         number = self.next_number("figure", explicit)
         para = self.add("caption", f"Figure {number}. {caption or url}".strip())
-        self.assets.append(_Asset(f"figure:{number}", "figure", number, caption, f"![{caption}]({url})", "text",
-                                  para.id))
+        self.assets.append(
+            _Asset(f"figure:{number}", "figure", number, caption, f"![{caption}]({url})", "text", para.id)
+        )
 
     def table(self, content: list[Any]) -> None:
         label = CAPTION_LABEL_RE.match(blocks_text(content[1][1]).strip())
@@ -361,37 +376,82 @@ def build(path: Path, fmt: str, db: Path, meta: dict[str, str]) -> None:
     con = sqlite3.connect(str(db))
     try:
         con.executescript(SCHEMA)
-        con.executemany("INSERT INTO meta (key, value) VALUES (?, ?)", sorted(
-            {**meta, **{f"doc_{k}": v for k, v in properties.items()}, "pages": str(pages), "file_name": path.name,
-             "format": fmt, "pandoc_version": pandoc_version()}.items()))
+        con.executemany(
+            "INSERT INTO meta (key, value) VALUES (?, ?)",
+            sorted(
+                {
+                    **meta,
+                    **{f"doc_{k}": v for k, v in properties.items()},
+                    "pages": str(pages),
+                    "file_name": path.name,
+                    "format": fmt,
+                    "pandoc_version": pandoc_version(),
+                }.items()
+            ),
+        )
         for number in range(1, pages + 1):
             mine = [p for p in walker.paragraphs if p.page == number]
             text = "\n\n".join(_unit_text(p) for p in mine)
             figures = sum(1 for a in walker.assets if a.kind == "figure" and a.page == number)
             con.execute(
                 "INSERT INTO pages (page, width, height, label, source, images, drawings, markup_annots, chars, text) "
-                "VALUES (?, 0, 0, ?, 'text', ?, 0, 0, ?, ?)", (number, str(number), figures, len(text), text))
+                "VALUES (?, 0, 0, ?, 'text', ?, 0, 0, ?, ?)",
+                (number, str(number), figures, len(text), text),
+            )
         con.executemany(
             "INSERT INTO paragraphs (id, page, last_page, kind, section, first_line, last_line, text) "
-            "VALUES (?, ?, ?, ?, ?, 0, 0, ?)", [(p.id, p.page, p.page, p.kind, p.section, p.text)
-                                                 for p in walker.paragraphs])
+            "VALUES (?, ?, ?, ?, ?, 0, 0, ?)",
+            [(p.id, p.page, p.page, p.kind, p.section, p.text) for p in walker.paragraphs],
+        )
         con.executemany(
             "INSERT INTO sections (id, parent, level, number, title, page, paragraph) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            [(s["id"], s["parent"], s["level"], s["number"], s["title"], by_id[s["paragraph"]].page, s["paragraph"])
-             for s in walker.sections])
-        con.execute("INSERT INTO segments (id, kind, first_page, last_page, label, evidence) "
-                    "VALUES (1, 'manuscript', 1, ?, '', '[]')", (pages,))
-        con.executemany("INSERT INTO structure (key, value) VALUES (?, ?)", [
-            ("current_segment", "1"), ("current_confidence", '"high"'), ("current_evidence", "[]"), ("round", '""'),
-            ("round_label", '""'), ("round_confidence", '""'), ("round_evidence", "[]")])
+            [
+                (s["id"], s["parent"], s["level"], s["number"], s["title"], by_id[s["paragraph"]].page, s["paragraph"])
+                for s in walker.sections
+            ],
+        )
+        con.execute(
+            "INSERT INTO segments (id, kind, first_page, last_page, label, evidence) "
+            "VALUES (1, 'manuscript', 1, ?, '', '[]')",
+            (pages,),
+        )
+        con.executemany(
+            "INSERT INTO structure (key, value) VALUES (?, ?)",
+            [
+                ("current_segment", "1"),
+                ("current_confidence", '"high"'),
+                ("current_evidence", "[]"),
+                ("round", '""'),
+                ("round_label", '""'),
+                ("round_confidence", '""'),
+                ("round_evidence", "[]"),
+            ],
+        )
         con.executemany(
             "INSERT INTO assets (segment, id, kind, number, label, page, last_page, x0, y0, x1, y1, caption, content, "
             "content_format, method, confidence, paragraph, seq) "
             "VALUES (1, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, ?, ?, ?, 'pandoc-ast', 'high', ?, ?)",
-            [(a.id, a.kind, a.number, f"{LABELS[a.kind]} {a.number}", a.page, a.page, a.caption, a.content,
-              a.content_format, a.paragraph, seq) for seq, a in enumerate(walker.assets, 1)])
-        con.executemany("INSERT INTO mentions (segment, asset, paragraph, page, text, strength) "
-                        "VALUES (1, ?, ?, ?, ?, 'strong')", mentions)
+            [
+                (
+                    a.id,
+                    a.kind,
+                    a.number,
+                    f"{LABELS[a.kind]} {a.number}",
+                    a.page,
+                    a.page,
+                    a.caption,
+                    a.content,
+                    a.content_format,
+                    a.paragraph,
+                    seq,
+                )
+                for seq, a in enumerate(walker.assets, 1)
+            ],
+        )
+        con.executemany(
+            "INSERT INTO mentions (segment, asset, paragraph, page, text, strength) VALUES (1, ?, ?, ?, ?, 'strong')",
+            mentions,
+        )
         con.execute("INSERT INTO paragraph_search (paragraph_search) VALUES ('rebuild')")
         con.commit()
     finally:

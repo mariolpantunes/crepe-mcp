@@ -11,6 +11,7 @@ issue types, and human-readable messages.
 
 No content is mutated here. This module is purely analytical.
 """
+
 from __future__ import annotations
 
 import os
@@ -35,16 +36,17 @@ if TYPE_CHECKING:
 # Data model
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class Issue:
-    type: str           # e.g. "forbidden_latex", "missing_image", "parse_error"
+    type: str  # e.g. "forbidden_latex", "missing_image", "parse_error"
     message: str
     line: int | None = None
     # Location fields — set only when applicable
     slide_index: int | None = None
     chapter_index: int | None = None
     section_index: int | None = None
-    page_name: str | None = None   # for drawio
+    page_name: str | None = None  # for drawio
 
 
 @dataclass
@@ -131,7 +133,7 @@ def _strip_fenced_content(markdown: str) -> str:
 
     for line in markdown.splitlines():
         if not in_fence:
-            m = re.match(r'^(`{3,}|~{3,})', line)
+            m = re.match(r"^(`{3,}|~{3,})", line)
             if m:
                 in_fence = True
                 fence_char = m.group(1)[0]
@@ -141,12 +143,12 @@ def _strip_fenced_content(markdown: str) -> str:
                 result.append(line)
         else:
             # Closing fence: same char, >= same run length, only whitespace after
-            m = re.match(r'^([`~]{' + str(fence_min_len) + r',})\s*$', line)
+            m = re.match(r"^([`~]{" + str(fence_min_len) + r",})\s*$", line)
             if m and m.group(1)[0] == fence_char:
                 in_fence = False
                 result.append(line)  # keep closing fence
             else:
-                result.append("")   # blank content — preserves line numbers
+                result.append("")  # blank content — preserves line numbers
     return "\n".join(result)
 
 
@@ -190,12 +192,14 @@ def _check_markdown(
         else:
             resolved = path
         if not os.path.isfile(resolved):
-            issues.append(Issue(
-                type="missing_image",
-                message=f"Image not found on disk: {path!r}",
-                line=line_no,
-                **loc,  # type: ignore[arg-type]
-            ))
+            issues.append(
+                Issue(
+                    type="missing_image",
+                    message=f"Image not found on disk: {path!r}",
+                    line=line_no,
+                    **loc,  # type: ignore[arg-type]
+                )
+            )
 
     # 3. Pandoc dry-run parse (only if pandoc is available)
     if shutil.which("pandoc") and markdown.strip():
@@ -237,9 +241,7 @@ def _pandoc_dry_run(
     )
     tmp_path: str | None = None  # H3: must be initialised before try so finally can guard it
     try:
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".md", delete=False, encoding="utf-8"
-        ) as tf:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False, encoding="utf-8") as tf:
             tf.write(markdown)
             tmp_path = tf.name
         result = subprocess.run(
@@ -252,24 +254,30 @@ def _pandoc_dry_run(
             # Parse pandoc's stderr for line numbers
             for err_line in result.stderr.splitlines():
                 line_no = _extract_pandoc_line(err_line)
-                issues.append(Issue(
-                    type="parse_error",
-                    message=f"Pandoc parse error: {err_line.strip()}",
-                    line=line_no,
-                    **loc,  # type: ignore[arg-type]
-                ))
+                issues.append(
+                    Issue(
+                        type="parse_error",
+                        message=f"Pandoc parse error: {err_line.strip()}",
+                        line=line_no,
+                        **loc,  # type: ignore[arg-type]
+                    )
+                )
     except subprocess.TimeoutExpired:
-        issues.append(Issue(
-            type="parse_timeout",
-            message="Pandoc parse timed out (15 s) — check for runaway fenced blocks.",
-            **loc,  # type: ignore[arg-type]
-        ))
+        issues.append(
+            Issue(
+                type="parse_timeout",
+                message="Pandoc parse timed out (15 s) — check for runaway fenced blocks.",
+                **loc,  # type: ignore[arg-type]
+            )
+        )
     except Exception as exc:
-        issues.append(Issue(
-            type="parse_error",
-            message=f"Could not run pandoc dry-run: {exc}",
-            **loc,  # type: ignore[arg-type]
-        ))
+        issues.append(
+            Issue(
+                type="parse_error",
+                message=f"Could not run pandoc dry-run: {exc}",
+                **loc,  # type: ignore[arg-type]
+            )
+        )
     finally:
         if tmp_path is not None:
             try:
@@ -291,6 +299,7 @@ def _extract_pandoc_line(err_line: str) -> int | None:
 # Presentation lint
 # ---------------------------------------------------------------------------
 
+
 def lint_presentation_content(
     pres: Presentation,
     slide_index: int | None = None,
@@ -309,11 +318,13 @@ def lint_presentation_content(
 
     if slide_index is not None:
         if slide_index < 0 or slide_index >= len(slides):
-            issues.append(Issue(
-                type="slide_not_found",
-                message=f"slide_index {slide_index} out of range (0-{len(slides)-1}).",
-                slide_index=slide_index,
-            ))
+            issues.append(
+                Issue(
+                    type="slide_not_found",
+                    message=f"slide_index {slide_index} out of range (0-{len(slides) - 1}).",
+                    slide_index=slide_index,
+                )
+            )
             return LintReport(valid=False, issues=issues)
         target_range = range(slide_index, slide_index + 1)
     else:
@@ -322,11 +333,13 @@ def lint_presentation_content(
     checked = _check_many([(slides[i][1], {"slide_index": i}) for i in target_range], workdir)
     for i, found in zip(target_range, checked, strict=True):
         if not slides[i][0].strip():
-            issues.append(Issue(
-                type="missing_title",
-                message="Slide has no title.",
-                slide_index=i,
-            ))
+            issues.append(
+                Issue(
+                    type="missing_title",
+                    message="Slide has no title.",
+                    slide_index=i,
+                )
+            )
         issues.extend(found)
 
     return LintReport(valid=len(issues) == 0, issues=issues)
@@ -335,6 +348,7 @@ def lint_presentation_content(
 # ---------------------------------------------------------------------------
 # Document lint
 # ---------------------------------------------------------------------------
+
 
 def lint_document_content(
     doc: Document,
@@ -349,19 +363,18 @@ def lint_document_content(
 
     # H2: snapshot under lock
     with doc.lock:
-        chapters = [
-            (ch.title, ch.intro, [(s.title, s.content) for s in ch.sections])
-            for ch in doc.chapters
-        ]
+        chapters = [(ch.title, ch.intro, [(s.title, s.content) for s in ch.sections]) for ch in doc.chapters]
     workdir = doc.workdir
 
     if chapter_index is not None:
         if chapter_index < 0 or chapter_index >= len(chapters):
-            issues.append(Issue(
-                type="chapter_not_found",
-                message=f"chapter_index {chapter_index} out of range (0-{len(chapters)-1}).",
-                chapter_index=chapter_index,
-            ))
+            issues.append(
+                Issue(
+                    type="chapter_not_found",
+                    message=f"chapter_index {chapter_index} out of range (0-{len(chapters) - 1}).",
+                    chapter_index=chapter_index,
+                )
+            )
             return LintReport(valid=False, issues=issues)
         target_range = range(chapter_index, chapter_index + 1)
     else:
@@ -377,21 +390,25 @@ def lint_document_content(
     for ci in target_range:
         ch_title, ch_intro, sections = chapters[ci]
         if not ch_title.strip():
-            issues.append(Issue(
-                type="missing_title",
-                message="Chapter has no title.",
-                chapter_index=ci,
-            ))
+            issues.append(
+                Issue(
+                    type="missing_title",
+                    message="Chapter has no title.",
+                    chapter_index=ci,
+                )
+            )
         if ch_intro:
             issues.extend(next(checked))
         for si, (sec_title, _) in enumerate(sections):
             if not sec_title.strip():
-                issues.append(Issue(
-                    type="missing_title",
-                    message="Section has no title.",
-                    chapter_index=ci,
-                    section_index=si,
-                ))
+                issues.append(
+                    Issue(
+                        type="missing_title",
+                        message="Section has no title.",
+                        chapter_index=ci,
+                        section_index=si,
+                    )
+                )
             issues.extend(next(checked))
 
     return LintReport(valid=len(issues) == 0, issues=issues)
@@ -400,6 +417,7 @@ def lint_document_content(
 # ---------------------------------------------------------------------------
 # Draw.io lint
 # ---------------------------------------------------------------------------
+
 
 def lint_drawio_file(input_path: str) -> LintReport:
     """Validate a .drawio file: XML structure, compressed content, cell hierarchy.
@@ -442,10 +460,12 @@ def lint_drawio_file(input_path: str) -> LintReport:
     if root.tag == "mxfile":
         diagrams = root.findall("diagram")
         if not diagrams:
-            issues.append(Issue(
-                type="no_pages",
-                message="<mxfile> contains no <diagram> children.",
-            ))
+            issues.append(
+                Issue(
+                    type="no_pages",
+                    message="<mxfile> contains no <diagram> children.",
+                )
+            )
         for i, diagram in enumerate(diagrams, start=1):
             name = diagram.get("name", f"Page-{i}")
             pages.append({"index": i, "name": name})
@@ -454,10 +474,12 @@ def lint_drawio_file(input_path: str) -> LintReport:
         pages.append({"index": 1, "name": "Page-1"})
         issues.extend(_check_graph_model_elem(root, page_name="Page-1"))
     else:
-        issues.append(Issue(
-            type="unexpected_root",
-            message=f"Unexpected root element <{root.tag}>; expected <mxfile> or <mxGraphModel>.",
-        ))
+        issues.append(
+            Issue(
+                type="unexpected_root",
+                message=f"Unexpected root element <{root.tag}>; expected <mxfile> or <mxGraphModel>.",
+            )
+        )
 
     return LintReport(valid=len(issues) == 0, issues=issues, pages=pages)
 
@@ -476,11 +498,13 @@ def _check_diagram_element(
         if graph_model is not None:
             issues.extend(_check_graph_model_elem(graph_model, page_name=name))
         else:
-            issues.append(Issue(
-                type="missing_graph_model",
-                message=f"Page {index} ({name!r}): <diagram> has children but no <mxGraphModel>.",
-                page_name=name,
-            ))
+            issues.append(
+                Issue(
+                    type="missing_graph_model",
+                    message=f"Page {index} ({name!r}): <diagram> has children but no <mxGraphModel>.",
+                    page_name=name,
+                )
+            )
     elif diagram.text and diagram.text.strip():
         # Text content — could be inline XML or base64+deflate compressed XML
         text = diagram.text.strip()
@@ -493,23 +517,29 @@ def _check_diagram_element(
                 if inner.tag == "mxGraphModel":
                     issues.extend(_check_graph_model_elem(inner, page_name=name))
             except ET.ParseError as exc:
-                issues.append(Issue(
-                    type="xml_parse_error",
-                    message=f"Page {index} ({name!r}): inner XML parse error: {exc}",
-                    page_name=name,
-                ))
+                issues.append(
+                    Issue(
+                        type="xml_parse_error",
+                        message=f"Page {index} ({name!r}): inner XML parse error: {exc}",
+                        page_name=name,
+                    )
+                )
         else:
-            issues.append(Issue(
-                type="unreadable_content",
-                message=f"Page {index} ({name!r}): diagram content could not be decoded or parsed.",
-                page_name=name,
-            ))
+            issues.append(
+                Issue(
+                    type="unreadable_content",
+                    message=f"Page {index} ({name!r}): diagram content could not be decoded or parsed.",
+                    page_name=name,
+                )
+            )
     else:
-        issues.append(Issue(
-            type="empty_page",
-            message=f"Page {index} ({name!r}): <diagram> element is empty.",
-            page_name=name,
-        ))
+        issues.append(
+            Issue(
+                type="empty_page",
+                message=f"Page {index} ({name!r}): <diagram> element is empty.",
+                page_name=name,
+            )
+        )
 
     return issues
 
@@ -519,11 +549,13 @@ def _check_graph_model_elem(model: ET.Element, page_name: str) -> list[Issue]:
     issues: list[Issue] = []
     root_elem = model.find("root")
     if root_elem is None:
-        issues.append(Issue(
-            type="missing_root",
-            message=f"Page {page_name!r}: <mxGraphModel> has no <root> child.",
-            page_name=page_name,
-        ))
+        issues.append(
+            Issue(
+                type="missing_root",
+                message=f"Page {page_name!r}: <mxGraphModel> has no <root> child.",
+                page_name=page_name,
+            )
+        )
         return issues
 
     cells = root_elem.findall("mxCell")
@@ -534,18 +566,22 @@ def _check_graph_model_elem(model: ET.Element, page_name: str) -> list[Issue]:
     for cell in cells:
         cid = cell.get("id")
         if cid is None:
-            issues.append(Issue(
-                type="missing_cell_id",
-                message=f"Page {page_name!r}: <mxCell> missing 'id' attribute.",
-                page_name=page_name,
-            ))
+            issues.append(
+                Issue(
+                    type="missing_cell_id",
+                    message=f"Page {page_name!r}: <mxCell> missing 'id' attribute.",
+                    page_name=page_name,
+                )
+            )
             continue
         if cid in cell_ids:
-            issues.append(Issue(
-                type="duplicate_cell_id",
-                message=f"Page {page_name!r}: duplicate mxCell id={cid!r}.",
-                page_name=page_name,
-            ))
+            issues.append(
+                Issue(
+                    type="duplicate_cell_id",
+                    message=f"Page {page_name!r}: duplicate mxCell id={cid!r}.",
+                    page_name=page_name,
+                )
+            )
         cell_ids.add(cid)
         if cid == "0":
             has_root_0 = True
@@ -553,17 +589,21 @@ def _check_graph_model_elem(model: ET.Element, page_name: str) -> list[Issue]:
             has_root_1 = True
 
     if not has_root_0:
-        issues.append(Issue(
-            type="missing_base_cell",
-            message=f"Page {page_name!r}: missing base root cell <mxCell id=\"0\"/>.",
-            page_name=page_name,
-        ))
+        issues.append(
+            Issue(
+                type="missing_base_cell",
+                message=f'Page {page_name!r}: missing base root cell <mxCell id="0"/>.',
+                page_name=page_name,
+            )
+        )
     if not has_root_1:
-        issues.append(Issue(
-            type="missing_layer_cell",
-            message=f"Page {page_name!r}: missing default layer <mxCell id=\"1\" parent=\"0\"/>.",
-            page_name=page_name,
-        ))
+        issues.append(
+            Issue(
+                type="missing_layer_cell",
+                message=f'Page {page_name!r}: missing default layer <mxCell id="1" parent="0"/>.',
+                page_name=page_name,
+            )
+        )
 
     return issues
 

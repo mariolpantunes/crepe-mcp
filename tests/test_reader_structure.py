@@ -26,8 +26,9 @@ class TestStructure(IsolatedTestCase):
             self.assertEqual(store.structure()["round"], spec.round, name)
             pages = store.manuscript_pages()
             if spec.current_manuscript:
-                self.assertEqual((pages["first"], pages["last"], pages["source"]),
-                                 (*spec.current_manuscript, "detected"), name)
+                self.assertEqual(
+                    (pages["first"], pages["last"], pages["source"]), (*spec.current_manuscript, "detected"), name
+                )
             else:
                 self.assertEqual((pages["first"], pages["last"], pages["source"]), (1, spec.pages, "whole-document"))
 
@@ -47,8 +48,9 @@ class TestStructure(IsolatedTestCase):
 
     def test_round_evidence(self):
         revision = DocumentStore.open(build_fixture("em_revision", self.tmp_path)).structure()
-        self.assertEqual((revision["round"], revision["round_label"], revision["round_confidence"]),
-                         ("revision", "R2", "high"))
+        self.assertEqual(
+            (revision["round"], revision["round_label"], revision["round_confidence"]), ("revision", "R2", "high")
+        )
         self.assertTrue(any("author responses on pages 38-58" in e for e in revision["round_evidence"]))
         first = DocumentStore.open(build_fixture("ieee_single", self.tmp_path)).structure()
         self.assertEqual((first["round"], first["round_confidence"]), ("first", "high"))

@@ -1,7 +1,8 @@
 """Turns in-memory Presentation state into the two pandoc inputs:
-  - config.yml  (passed as --metadata-file)
-  - slides.md   (the document body, one ## block per slide)
+- config.yml  (passed as --metadata-file)
+- slides.md   (the document body, one ## block per slide)
 """
+
 from __future__ import annotations
 
 import re
@@ -20,7 +21,6 @@ _TOP_LEVEL_HEADING_RE = re.compile(r"^#\s+\S", re.MULTILINE)
 _HEADING_RE = re.compile(r"^(#{1,2})\s+(.*)$")
 # A fenced code block delimiter (``` or ~~~, 3+ chars, optional info string).
 _FENCE_OPEN_RE = re.compile(r"^(`{3,}|~{3,})")
-
 
 
 # LaTeX preamble included in every Beamer/lualatex deck.
@@ -156,8 +156,7 @@ def parse_slides_markdown(markdown: str) -> list[tuple[str, str]]:
 
     if any(line.strip() for line in preamble):
         raise ValueError(
-            "Markdown has content before the first '#'/'##' heading -- "
-            "every slide must start with a heading line."
+            "Markdown has content before the first '#'/'##' heading -- every slide must start with a heading line."
         )
     if not blocks:
         raise ValueError("No '#' or '##' headings found in the given Markdown -- nothing to import.")

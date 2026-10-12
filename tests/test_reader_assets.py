@@ -111,14 +111,18 @@ class TestAssets(IsolatedTestCase):
         builder.heading("1. Results")
         builder.paragraph(filler(1, 3))
         builder.paragraph("Table S2 compares the three methods on both datasets.")
-        builder.booktabs("TABLE S.2:", "Accuracy of the compared methods.",
-                         [["Method", "Dataset A", "Dataset B"], ["Baseline", "71.2", "64.0"], ["Ours", "78.9", "70.3"]])
+        builder.booktabs(
+            "TABLE S.2:",
+            "Accuracy of the compared methods.",
+            [["Method", "Dataset A", "Dataset B"], ["Baseline", "71.2", "64.0"], ["Ours", "78.9", "70.3"]],
+        )
         builder.paragraph(filler(2, 3))
         store = DocumentStore.open(builder.save(self.tmp_path / "booktabs.pdf"))
         table = store.asset("table:S2")
         assert table is not None
-        self.assertEqual((table["method"], table["confidence"], table["content_format"]),
-                         ("caption+rules", "medium", "markdown"))
+        self.assertEqual(
+            (table["method"], table["confidence"], table["content_format"]), ("caption+rules", "medium", "markdown")
+        )
         self.assertEqual(table["content"].splitlines()[0], "| Method | Dataset A | Dataset B |")
         self.assertIn("| Ours | 78.9 | 70.3 |", table["content"])
         self.assertEqual(len(table["mentions"]), 1)
@@ -142,8 +146,10 @@ class TestRealAccessAssets(IsolatedTestCase):
         self.assertTrue(all(a["method"] == "caption+table" and a["content"].startswith("| ") for a in tables))
         first = store.asset("table:1")
         assert first is not None
-        self.assertEqual(first["content"].splitlines()[:3], ["| λ | SR | Comput. time (h) |", "|---|---|---|",
-                                                              "| 2 | -21775 | 6.47 |"])
+        self.assertEqual(
+            first["content"].splitlines()[:3],
+            ["| λ | SR | Comput. time (h) |", "|---|---|---|", "| 2 | -21775 | 6.47 |"],
+        )
         for algorithm_id in ("algorithm:1", "algorithm:2"):
             algorithm = store.asset(algorithm_id)
             assert algorithm is not None

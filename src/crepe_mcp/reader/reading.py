@@ -59,7 +59,7 @@ def read_pages(
             cut = cut if cut > 0 else room
             chunks.append(f"{header}\n{text[:cut]}")
             read_last = number
-            next_cursor = f"p{number}@{start + cut + (1 if text[cut:cut + 1] == chr(10) else 0)}"
+            next_cursor = f"p{number}@{start + cut + (1 if text[cut : cut + 1] == chr(10) else 0)}"
             break
         chunks.append(block)
         returned.append(number)
@@ -93,8 +93,7 @@ def read_section(store: DocumentStore, heading: str, first: int, last: int) -> s
     if match is None:
         labels = [section_label(s) for s in sections][:40]
         raise ReaderError(
-            f"No heading matches {heading[:80]!r}. Headings: {labels}. "
-            "Pass one of them, or use search_document."
+            f"No heading matches {heading[:80]!r}. Headings: {labels}. Pass one of them, or use search_document."
         )
     parts: list[str] = []
     used = 0

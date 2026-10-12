@@ -67,7 +67,8 @@ from crepe_mcp.reader.indexes import (
 Rect = tuple[float, float, float, float]
 
 FIGURE_TABLE_RE = re.compile(
-    rf"^(?P<kind>figure|fig|table|tab)\.?\s*(?P<number>{LABEL_NUMBER}){LABEL_END}", re.IGNORECASE)
+    rf"^(?P<kind>figure|fig|table|tab)\.?\s*(?P<number>{LABEL_NUMBER}){LABEL_END}", re.IGNORECASE
+)
 BLOCK_RE = re.compile(r"^(?P<kind>algorithm|listing)\s+(?P<number>\d+)\b", re.IGNORECASE)
 EQUATION_NUMBER_RE = re.compile(r"^\((?P<number>\d{1,3})\)$")
 REFERENCE_RE = re.compile(r"^\[(?P<number>\d{1,4})\]")
@@ -183,7 +184,11 @@ def _text_blocks(pages: list[Page]) -> dict[tuple[float, float], tuple[float, fl
 
 
 def _geometry(
-    pdf_page: Any, page: Page, with_tables: bool, metrics: Metrics, text_block: tuple[float, float],
+    pdf_page: Any,
+    page: Page,
+    with_tables: bool,
+    metrics: Metrics,
+    text_block: tuple[float, float],
     drawings: list[dict[str, Any]] | None = None,
 ) -> _Geometry:
     em, line_height = metrics.body_size, metrics.line_height
@@ -225,8 +230,9 @@ def _geometry(
     geometry.rules.sort()
     if with_tables:
         em = metrics.body_size
-        geometry.joined = sorted(_join_rules(geometry.rules, RULE_MAX_THICKNESS * em, RULE_ALIGNMENT * em),
-                                 key=lambda rule: rule[1])
+        geometry.joined = sorted(
+            _join_rules(geometry.rules, RULE_MAX_THICKNESS * em, RULE_ALIGNMENT * em), key=lambda rule: rule[1]
+        )
         geometry.ruled = _ruled_regions(geometry.joined, page, metrics)
     return geometry
 
@@ -237,7 +243,8 @@ def _with_labels(region: Rect, page: Page, metrics: Metrics) -> Rect:
     it and the region (the region never grows into a caption)."""
     captions = [line for line in page.body_lines() if CAPTION_RE.match(line.text)]
     labels = [
-        line for line in page.body_lines()
+        line
+        for line in page.body_lines()
         if metrics.smaller(line.size) and 0 <= line.y0 and line.y1 <= page.height and line not in captions
     ]
     grown = region
@@ -269,8 +276,13 @@ def _ruled_regions(joined: list[Rect], page: Page, metrics: Metrics) -> list[Rec
     for rule in sorted(joined, key=lambda r: r[1]):
         for group in groups:
             last = group[-1]
-            if abs(rule[0] - last[0]) <= align and abs(rule[2] - last[2]) <= align and not any(
-                last[3] < line.y0 and line.y1 < rule[1] and last[0] - align <= line.x0 <= last[2] for line in captions
+            if (
+                abs(rule[0] - last[0]) <= align
+                and abs(rule[2] - last[2]) <= align
+                and not any(
+                    last[3] < line.y0 and line.y1 < rule[1] and last[0] - align <= line.x0 <= last[2]
+                    for line in captions
+                )
             ):
                 group.append(rule)
                 break
@@ -283,8 +295,15 @@ def _ruled_regions(joined: list[Rect], page: Page, metrics: Metrics) -> list[Rec
     ]
 
 
-def _table_run(page: int, region: Rect, rules: Callable[[int], list[Rect]], captions: Callable[[int], list[Line]],
-               block: Callable[[int], tuple[float, float]], last: int, align: float) -> list[tuple[int, Rect]]:
+def _table_run(
+    page: int,
+    region: Rect,
+    rules: Callable[[int], list[Rect]],
+    captions: Callable[[int], list[Line]],
+    block: Callable[[int], tuple[float, float]],
+    last: int,
+    align: float,
+) -> list[tuple[int, Rect]]:
     """The pages and regions one table covers. Its rules are its limit, not the page: the table ends at its last
     rule, and when no further rule of its own follows on the page, it carries on wherever the next page opens with
     rules with the same ends and no caption stands between the two. Booktabs' three rules and a table ruled on
@@ -301,8 +320,9 @@ def _table_run(page: int, region: Rect, rules: Callable[[int], list[Rect]], capt
         following = rules(page + 1)
         if not following or not mine(following[0]):
             break  # the next page does not open with this table's rules
-        if (any(line.y0 > region[3] for line in captions(page))
-                or any(line.y1 < following[0][3] for line in captions(page + 1))):
+        if any(line.y0 > region[3] for line in captions(page)) or any(
+            line.y1 < following[0][3] for line in captions(page + 1)
+        ):
             break  # a caption between the two starts another item
         run = [following[0]]
         for rule in following[1:]:
@@ -359,9 +379,11 @@ def _table_grid(table: Any, words: list[Any], touch: float, same_row: float) -> 
     def keeps(x: float) -> bool:
         cut = sum(1 for line in rows if any(w[0] + touch < x < w[2] - touch for w in line))
         split = sum(
-            1 for line in rows
+            1
+            for line in rows
             if not any(w[0] + touch < x < w[2] - touch for w in line)
-            and any(w[2] <= x for w in line) and any(w[0] >= x for w in line)
+            and any(w[2] <= x for w in line)
+            and any(w[0] >= x for w in line)
         )
         return cut <= split
 
@@ -459,8 +481,15 @@ def _numeric(text: str) -> bool:
     return any(ch.isdigit() for ch in text) and all(ch.isdigit() or ch in ".,±×%−-+()[] " for ch in text)
 
 
-def _phrase_panels(words: list[Any], region: Rect, rules: list[tuple[float, float, float]], joint: float,
-                   same_row: float, align: float, touch: float) -> list[tuple[str, list[list[str]]]]:
+def _phrase_panels(
+    words: list[Any],
+    region: Rect,
+    rules: list[tuple[float, float, float]],
+    joint: float,
+    same_row: float,
+    align: float,
+    touch: float,
+) -> list[tuple[str, list[list[str]]]]:
     """Table cells from phrases (words closer than `joint`, split at column edges: where most rows start a word and
     some row leaves a wider space before it), per panel: a centred row of one phrase with a rule above
     and below it titles the panel that follows when the next row is a header (no numeric cell), and each panel gets
@@ -469,20 +498,27 @@ def _phrase_panels(words: list[Any], region: Rect, rules: list[tuple[float, floa
     ordered = [sorted(band, key=lambda w: w[0]) for band in _bands(inside, same_row)]
     starts = sorted((w[0], index, w[2]) for index, band in enumerate(ordered) for w in band)
     lefts = [x for x, _, _ in starts]
-    opened = {(w[0], index) for index, band in enumerate(ordered)
-              for before, w in zip([None, *band], band, strict=False) if before is None or w[0] - before[2] > joint}
+    opened = {
+        (w[0], index)
+        for index, band in enumerate(ordered)
+        for before, w in zip([None, *band], band, strict=False)
+        if before is None or w[0] - before[2] > joint
+    }
 
     def column_edge(x: float) -> bool:
         # the left edge of a column of left-aligned text: most rows start a word there, most of those words open a
         # phrase (after a wide space or at the row start), and most opening words end at different places (ragged
         # text, unlike a column of equal-width numbers)
-        there = starts[bisect_left(lefts, x - touch):bisect_right(lefts, x + touch)]
+        there = starts[bisect_left(lefts, x - touch) : bisect_right(lefts, x + touch)]
         rows_there = {index for _, index, _ in there}
         opening = [(index, x1) for x0, index, x1 in there if (x0, index) in opened]
         ends = sorted(x1 for _, x1 in opening)
         distinct_ends = 1 + sum(1 for a, b in zip(ends, ends[1:], strict=False) if b - a > touch)
-        return (len(rows_there) * 2 > len(ordered) and len({index for index, _ in opening}) * 2 > len(rows_there)
-                and distinct_ends * 2 > len(ends))
+        return (
+            len(rows_there) * 2 > len(ordered)
+            and len({index for index, _ in opening}) * 2 > len(rows_there)
+            and distinct_ends * 2 > len(ends)
+        )
 
     rows: list[tuple[float, list[tuple[float, float, str]]]] = []
     for band in ordered:
@@ -500,7 +536,9 @@ def _phrase_panels(words: list[Any], region: Rect, rules: list[tuple[float, floa
     for index, (centre, phrases) in enumerate(rows):
         x0, x1, text = phrases[0]
         titles = (
-            len(phrases) == 1 and 0 < index < len(rows) - 1 and abs((x0 + x1) / 2 - centre_x) <= align
+            len(phrases) == 1
+            and 0 < index < len(rows) - 1
+            and abs((x0 + x1) / 2 - centre_x) <= align
             and any(rows[index - 1][0] < y < centre for y, _, _ in rules)
             and any(centre < y < rows[index + 1][0] for y, _, _ in rules)
             and not any(_numeric(cell) for _, _, cell in rows[index + 1][1])
@@ -509,8 +547,11 @@ def _phrase_panels(words: list[Any], region: Rect, rules: list[tuple[float, floa
             panels.append((text, []))
         else:
             panels[-1][1].append((centre, phrases))
-    return [(title, _panel_grid(panel, [rule for rule in rules if panel[0][0] < rule[0] < panel[-1][0]], align))
-            for title, panel in panels if panel]
+    return [
+        (title, _panel_grid(panel, [rule for rule in rules if panel[0][0] < rule[0] < panel[-1][0]], align))
+        for title, panel in panels
+        if panel
+    ]
 
 
 def _panel_grid(rows: list[_Row], rules: list[tuple[float, float, float]], align: float) -> list[list[str]]:
@@ -531,6 +572,7 @@ def _panel_grid(rows: list[_Row], rules: list[tuple[float, float, float]], align
     else:
         top_rows = 1
     header, body = rows[:top_rows], rows[top_rows:]
+
     def merged(phrases: list[tuple[float, float, str]]) -> list[list[float]]:
         extents: list[list[float]] = []
         for x0, x1, _ in sorted(phrases):
@@ -552,8 +594,12 @@ def _panel_grid(rows: list[_Row], rules: list[tuple[float, float, float]], align
 
     def nearest(x0: float, x1: float) -> int:
         centre = (x0 + x1) / 2
-        return min(range(len(spans)), key=lambda i: 0 if spans[i][0] <= centre <= spans[i][1]
-                   else min(abs(centre - spans[i][0]), abs(centre - spans[i][1])))
+        return min(
+            range(len(spans)),
+            key=lambda i: (
+                0 if spans[i][0] <= centre <= spans[i][1] else min(abs(centre - spans[i][0]), abs(centre - spans[i][1]))
+            ),
+        )
 
     def under_rule(level: int, x0: float, x1: float) -> tuple[float, float]:
         if level + 1 >= len(header):
@@ -640,15 +686,19 @@ def _table_text(
     if len(vertical) >= 3 or len(boxes) >= 3:
         best: tuple[int, list[list[str]]] | None = None
         for table in pdf_page.find_tables(clip=clip, strategy="lines", paths=all_paths).tables:
-            grid = _table_grid(table, [w for w in words if _centre_inside((w[0], w[1], w[2], w[3]), inside_region)],
-                               thickness, row)
+            grid = _table_grid(
+                table, [w for w in words if _centre_inside((w[0], w[1], w[2], w[3]), inside_region)], thickness, row
+            )
             filled = sum(1 for line in grid for cell in line if cell)
             if len(grid) >= 2 and len(grid[0]) >= 2 and (best is None or filled > best[0]):
                 best = (filled, grid)
         if best is not None:
             lines_grid = _repair_rows(best[1])
-    inner = [rule for rule in _horizontal_rules(drawings, thickness)
-             if rule[2] - rule[1] >= RULE_MIN_LENGTH * em and region[1] + row < rule[0] < region[3] - row]
+    inner = [
+        rule
+        for rule in _horizontal_rules(drawings, thickness)
+        if rule[2] - rule[1] >= RULE_MIN_LENGTH * em and region[1] + row < rule[0] < region[3] - row
+    ]
     joint = 2 * _word_spacing(words, inside_region, em)
     panels = _phrase_panels(words, inside_region, inner, joint, row, align, thickness)
     columns = max((len(grid[0]) for _, grid in panels if len(grid) >= 2), default=0)
@@ -657,17 +707,18 @@ def _table_text(
     if columns >= 2:
         parts = []
         for title, grid in panels:
-            table = _markdown(grid) if len(grid) >= 2 and len(grid[0]) >= 2 else "\n".join(
-                " ".join(cell for cell in line if cell) for line in grid)
+            table = (
+                _markdown(grid)
+                if len(grid) >= 2 and len(grid[0]) >= 2
+                else "\n".join(" ".join(cell for cell in line if cell) for line in grid)
+            )
             parts.append("\n".join(part for part in (title, table) if part))
         return "\n\n".join(part for part in parts if part), "markdown", "phrases"
     inside = [line for line in page.body_lines() if _centre_inside((line.x0, line.y0, line.x1, line.y1), region)]
     return "\n".join(_rows(inside, row)), "text", "rows"
 
 
-def _display_block(
-    number: Line, band: list[Line], body: list[Line], numbers: list[Line], metrics: Metrics
-) -> Rect:
+def _display_block(number: Line, band: list[Line], body: list[Line], numbers: list[Line], metrics: Metrics) -> Rect:
     """The display equation around a numbered row: the row plus adjacent lines within a line height that are set
     apart from prose (indented from the column's usual left edge, or in smaller type: limits, scripts, fraction
     parts), up to the number's left edge. Growth stops at prose (three or more words), at pieces sharing a row with
@@ -681,19 +732,26 @@ def _display_block(
         block = _union(block, (line.x0, line.y0, min(line.x1, number.x0), line.y1))
     own = (number.y0 + number.y1) / 2
     others = [(other.y0 + other.y1) / 2 for other in numbers if other is not number]
+
     def in_prose_row(line: Line) -> bool:
         # the text row around the line (pieces split at inline math) starts at the column's left edge and holds prose
         centre = (line.y0 + line.y1) / 2
         row = [other for other in column if abs((other.y0 + other.y1) / 2 - centre) <= SAME_ROW * line_height]
-        return (min(other.x0 for other in row) < left + INDENT * em
-                and sum(len(PROSE_WORD_RE.findall(other.text)) for other in row) >= 3)
+        return (
+            min(other.x0 for other in row) < left + INDENT * em
+            and sum(len(PROSE_WORD_RE.findall(other.text)) for other in row) >= 3
+        )
 
     def displayed(line: Line) -> bool:
         centre = (line.y0 + line.y1) / 2
         return (
-            line is not number and line not in band and line.x1 <= number.x0 + em and line.x0 >= left - em
+            line is not number
+            and line not in band
+            and line.x1 <= number.x0 + em
+            and line.x0 >= left - em
             and (line.x0 >= left + INDENT * em or metrics.smaller(line.size))
-            and len(PROSE_WORD_RE.findall(line.text)) < 3 and not CAPTION_RE.match(line.text)
+            and len(PROSE_WORD_RE.findall(line.text)) < 3
+            and not CAPTION_RE.match(line.text)
             and not any(abs(centre - other) < abs(centre - own) for other in others)
             and not in_prose_row(line)
         )
@@ -729,7 +787,8 @@ def _nearest(
     for option in options:
         rect = option[2]
         crosses_column = rect[0] < x_range[1] - align < x_range[1] + align < rect[2] or (
-            rect[0] < x_range[0] - align < x_range[0] + align < rect[2])
+            rect[0] < x_range[0] - align < x_range[0] + align < rect[2]
+        )
         if not (x_range[0] <= (rect[0] + rect[2]) / 2 <= x_range[1] or crosses_column):
             continue
         for distance, preference in ((caption[1] - rect[3], 0), (rect[1] - caption[3], 1)):
@@ -757,13 +816,12 @@ def _number(value: str) -> str:
     part = re.search(r"\.?\s?\(?([A-Za-z])\)?$", value)
     if part and not re.fullmatch(r"[IVXivx]+", value):
         suffix = part.group(1).lower()
-        value = value[:part.start()].strip()
+        value = value[: part.start()].strip()
     if re.fullmatch(r"[IVXivx]+", value):
         return value.upper() + suffix
     prefix = re.match(r"^([A-Za-z])\.?\s?(?=\d)", value)
-    digits = value[prefix.end():] if prefix else value
-    return ((prefix.group(1).upper() if prefix else "")
-            + ".".join(str(int(part)) for part in digits.split(".")) + suffix)
+    digits = value[prefix.end() :] if prefix else value
+    return (prefix.group(1).upper() if prefix else "") + ".".join(str(int(part)) for part in digits.split(".")) + suffix
 
 
 def _roman_value(value: str) -> int:
@@ -830,7 +888,10 @@ WORKER_TIMEOUT = 600  # seconds all workers together may take before their pages
 
 
 def _geometries_in_workers(
-    pdf_path: Path, numbers: list[int], pages: dict[int, Page], metrics: Metrics,
+    pdf_path: Path,
+    numbers: list[int],
+    pages: dict[int, Page],
+    metrics: Metrics,
     blocks: dict[int, tuple[float, float]],
 ) -> dict[int, _Geometry]:
     """Geometry (with tables) of the given pages computed by worker processes; pages a worker did not deliver are
@@ -849,8 +910,14 @@ def _geometries_in_workers(
                 tasks, out = Path(tmp) / f"tasks{index}.pkl", Path(tmp) / f"out{index}.pkl"
                 tasks.write_bytes(pickle.dumps([(n, pages[n], metrics, blocks[n]) for n in share]))
                 cmd = [sys.executable, "-m", "crepe_mcp.reader.geometry_worker", str(pdf_path), str(tasks), str(out)]
-                running.append((subprocess.Popen(cmd, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                                                 stderr=subprocess.DEVNULL), out))
+                running.append(
+                    (
+                        subprocess.Popen(
+                            cmd, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+                        ),
+                        out,
+                    )
+                )
             for process, out in running:
                 try:
                     if process.wait(timeout=max(0.0, deadline - monotonic())) == 0 and out.is_file():
@@ -922,8 +989,10 @@ def build_assets(
     # find_tables dominates the build and every page is independent: the table pages go to worker processes
     # (the parent meanwhile does the cheap pages); the results are those of computing them one after another.
     if len(table_pages) >= PARALLEL_MIN_TABLE_PAGES:
-        table_blocks = {n: text_blocks.get((page_by_number[n].width, page_by_number[n].height),
-                                           (0.0, page_by_number[n].height)) for n in table_pages}
+        table_blocks = {
+            n: text_blocks.get((page_by_number[n].width, page_by_number[n].height), (0.0, page_by_number[n].height))
+            for n in table_pages
+        }
         geometry.update(_geometries_in_workers(pdf_path, sorted(table_pages), page_by_number, metrics, table_blocks))
     for number in geometry_pages:
         if number not in geometry:
@@ -943,14 +1012,18 @@ def build_assets(
         key = (asset.segment, asset.id)
         kept = assets.get(key)
         # a label printed without its text (a stray 'Fig. 1.' above the figure) loses to the caption carrying it
-        if kept is None or (LABEL_ONLY_RE.match(kept.caption.strip())
-                            and not LABEL_ONLY_RE.match(asset.caption.strip())):
+        if kept is None or (
+            LABEL_ONLY_RE.match(kept.caption.strip()) and not LABEL_ONLY_RE.match(asset.caption.strip())
+        ):
             assets[key] = asset
 
     for paragraph, kind, number, label in captions:
         first = lines_by_id[paragraph.first_line]
-        span = [lines_by_id[i] for i in range(paragraph.first_line, paragraph.last_line + 1)
-                if i in lines_by_id and lines_by_id[i].page == first.page]
+        span = [
+            lines_by_id[i]
+            for i in range(paragraph.first_line, paragraph.last_line + 1)
+            if i in lines_by_id and lines_by_id[i].page == first.page
+        ]
         caption_rect = (min(ln.x0 for ln in span), first.y0, max(ln.x1 for ln in span), max(ln.y1 for ln in span))
         page = page_by_number[first.page]
         found = geometry[first.page]
@@ -965,22 +1038,54 @@ def build_assets(
         content, content_format = "", "text"
         ends = first.page
         if bbox is not None and kind == "table":
-            run = ([(first.page, bbox)] if method == "caption+table" else _table_run(
-                first.page, bbox, lambda number: geometry_of(number).joined, caption_lines, text_block,
-                last_page, RULE_ALIGNMENT * em))
-            texts = [_table_text(doc[number - 1], part, page_by_number[number], metrics, drawings_of(number))
-                     for number, part in run]
+            run = (
+                [(first.page, bbox)]
+                if method == "caption+table"
+                else _table_run(
+                    first.page,
+                    bbox,
+                    lambda number: geometry_of(number).joined,
+                    caption_lines,
+                    text_block,
+                    last_page,
+                    RULE_ALIGNMENT * em,
+                )
+            )
+            texts = [
+                _table_text(doc[number - 1], part, page_by_number[number], metrics, drawings_of(number))
+                for number, part in run
+            ]
             content, content_format = _merge_tables([(text, fmt) for text, fmt, _ in texts])
             ends = run[-1][0]
             confidence = "high" if texts[0][2] == "lines" and method == "caption+table" else "medium"
         elif bbox is not None:
             region = bbox
             span_ids = {s.id for s in span}
-            inner = [ln for ln in page.body_lines() if ln.id not in span_ids
-                     and _centre_inside((ln.x0, ln.y0, ln.x1, ln.y1), region)]
+            inner = [
+                ln
+                for ln in page.body_lines()
+                if ln.id not in span_ids and _centre_inside((ln.x0, ln.y0, ln.x1, ln.y1), region)
+            ]
             content = "\n".join(ln.text for ln in inner)
-        add(Asset(f"{kind}:{number}", kind, number, label, first.page, bbox, paragraph.text, content,
-                  content_format, method, confidence, paragraph.id, first.column, first.y0, last_page=ends))
+        add(
+            Asset(
+                f"{kind}:{number}",
+                kind,
+                number,
+                label,
+                first.page,
+                bbox,
+                paragraph.text,
+                content,
+                content_format,
+                method,
+                confidence,
+                paragraph.id,
+                first.column,
+                first.y0,
+                last_page=ends,
+            )
+        )
 
     for line, match in blocks:
         page = page_by_number[line.page]
@@ -991,12 +1096,34 @@ def build_assets(
             continue  # a sentence such as "Algorithm 1 details ..." rather than an algorithm block
         closing = [r[1] for r in rules if r[1] > line.y1 + tolerance]
         end = min(closing) if closing else max(ln.y1 for ln in page.body_lines())
-        inside = [ln for ln in page.body_lines() if ln.id != line.id and ln.y0 >= line.y1 - tolerance
-                  and ln.y1 <= end + tolerance and ln.x0 >= left - em and ln.x1 <= right + em]
+        inside = [
+            ln
+            for ln in page.body_lines()
+            if ln.id != line.id
+            and ln.y0 >= line.y1 - tolerance
+            and ln.y1 <= end + tolerance
+            and ln.x0 >= left - em
+            and ln.x1 <= right + em
+        ]
         kind, number = match.group("kind").lower(), _number(match.group("number"))
-        add(Asset(f"{kind}:{number}", kind, number, match.group(0), line.page, (left, top[0][1], right, end),
-                  line.text, "\n".join(_rows(inside, tolerance)), "text", "caption+rules", "high",
-                  paragraph_of_line.get(line.id, 0), line.column, line.y0))
+        add(
+            Asset(
+                f"{kind}:{number}",
+                kind,
+                number,
+                match.group(0),
+                line.page,
+                (left, top[0][1], right, end),
+                line.text,
+                "\n".join(_rows(inside, tolerance)),
+                "text",
+                "caption+rules",
+                "high",
+                paragraph_of_line.get(line.id, 0),
+                line.column,
+                line.y0,
+            )
+        )
 
     for page in pages:
         body = page.body_lines()
@@ -1007,9 +1134,13 @@ def build_assets(
                 continue
             left, right = _column_range(page, line.column)
             centre = (line.y0 + line.y1) / 2
-            row = [ln for ln in body if ln.id != line.id
-                   and (ln.column == line.column or -1 in (ln.column, line.column))
-                   and abs((ln.y0 + ln.y1) / 2 - centre) <= tolerance]
+            row = [
+                ln
+                for ln in body
+                if ln.id != line.id
+                and (ln.column == line.column or -1 in (ln.column, line.column))
+                and abs((ln.y0 + ln.y1) / 2 - centre) <= tolerance
+            ]
             if line.x0 < (left + right) / 2 or any(ln.x0 >= line.x1 for ln in row):
                 continue  # an equation number is the rightmost item of its row, in the right half of the column
             band = [ln for ln in row if not EQUATION_NUMBER_RE.match(ln.text)]
@@ -1018,13 +1149,27 @@ def build_assets(
             content, confidence = equation_text(doc[page.number - 1], block, number_box)
             content_format = "text+mathml"
             if not content:
-                inside = [ln for ln in body
-                          if ln is not line and _centre_inside((ln.x0, ln.y0, ln.x1, ln.y1), block)]
+                inside = [ln for ln in body if ln is not line and _centre_inside((ln.x0, ln.y0, ln.x1, ln.y1), block)]
                 content, content_format, confidence = "\n".join(_rows(inside, tolerance)), "text", "low"
             number = _number(match.group("number"))
-            add(Asset(f"equation:{number}", "equation", number, line.text, page.number, _union(block, number_box),
-                      "", content, content_format, "number-line", confidence, paragraph_of_line.get(line.id, 0),
-                      line.column, line.y0))
+            add(
+                Asset(
+                    f"equation:{number}",
+                    "equation",
+                    number,
+                    line.text,
+                    page.number,
+                    _union(block, number_box),
+                    "",
+                    content,
+                    content_format,
+                    "number-line",
+                    confidence,
+                    paragraph_of_line.get(line.id, 0),
+                    line.column,
+                    line.y0,
+                )
+            )
 
     displays: dict[int, list[Asset]] = {}
     for asset in assets.values():
@@ -1053,7 +1198,7 @@ def build_assets(
         parts = [paragraph.text]
         shown: set[str] = set()
         in_proof = False
-        for following in paragraphs[index + 1:]:
+        for following in paragraphs[index + 1 :]:
             stop = following.kind == "heading" or following.section != paragraph.section
             if stop or STATEMENT_RE.match(following.text):
                 break
@@ -1068,9 +1213,24 @@ def build_assets(
                 break
         kind, number = match.group("kind").lower(), _number(match.group("number"))
         first = lines_by_id[paragraph.first_line]
-        add(Asset(f"{kind}:{number}", "statement", number, match.group(0).rstrip(".: "), paragraph.page, None, "",
-                  "\n\n".join(parts)[:STATEMENT_BUDGET], "text", "label-paragraph", "medium", paragraph.id,
-                  first.column, first.y0))
+        add(
+            Asset(
+                f"{kind}:{number}",
+                "statement",
+                number,
+                match.group(0).rstrip(".: "),
+                paragraph.page,
+                None,
+                "",
+                "\n\n".join(parts)[:STATEMENT_BUDGET],
+                "text",
+                "label-paragraph",
+                "medium",
+                paragraph.id,
+                first.column,
+                first.y0,
+            )
+        )
 
     for section in sections:
         if not REFERENCES_RE.match(section.title):
@@ -1082,8 +1242,24 @@ def build_assets(
             if match and section.paragraph < paragraph.id < end:
                 number = _number(match.group("number"))
                 first = lines_by_id[paragraph.first_line]
-                add(Asset(f"reference:{number}", "reference", number, match.group(0), paragraph.page, None, "",
-                          paragraph.text, "text", "numbered-entry", "high", paragraph.id, first.column, first.y0))
+                add(
+                    Asset(
+                        f"reference:{number}",
+                        "reference",
+                        number,
+                        match.group(0),
+                        paragraph.page,
+                        None,
+                        "",
+                        paragraph.text,
+                        "text",
+                        "numbered-entry",
+                        "high",
+                        paragraph.id,
+                        first.column,
+                        first.y0,
+                    )
+                )
 
     doc.close()
     ordered = sorted(assets.values(), key=lambda a: (a.page, a.column, a.y, a.kind, a.id))
@@ -1120,8 +1296,14 @@ def _mentions(
         segment = segment_of_page.get(paragraph.page, 0)
         equation_numbers = {a.number for (s, _), a in assets.items() if s == segment and a.kind == "equation"}
 
-        def record(asset_id: str, text: str, strength: str, paragraph: Paragraph = paragraph,
-                   mine: set[str] = mine, segment: int = segment) -> None:
+        def record(
+            asset_id: str,
+            text: str,
+            strength: str,
+            paragraph: Paragraph = paragraph,
+            mine: set[str] = mine,
+            segment: int = segment,
+        ) -> None:
             for cited in _cited(assets, segment, asset_id):
                 if cited not in mine and (segment, cited, paragraph.id) not in seen:
                     seen.add((segment, cited, paragraph.id))

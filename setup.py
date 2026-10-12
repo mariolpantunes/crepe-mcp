@@ -7,6 +7,7 @@ and macOS /Applications and /opt/homebrew paths), exports non-secret environment
 (`CREPE_` prefixed) to the user's shell profile (~/.bashrc / ~/.zshrc), and registers
 standard stdio configurations with client hosts.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -307,7 +308,8 @@ def has_flatpak_libreoffice() -> bool:
     try:
         result = subprocess.run(
             ["flatpak", "info", "org.libreoffice.LibreOffice"],
-            capture_output=True, timeout=10,
+            capture_output=True,
+            timeout=10,
         )
         return result.returncode == 0
     except Exception:
@@ -348,7 +350,8 @@ def has_flatpak_drawio() -> bool:
     try:
         result = subprocess.run(
             ["flatpak", "info", "com.jgraph.drawio.desktop"],
-            capture_output=True, timeout=10,
+            capture_output=True,
+            timeout=10,
         )
         return result.returncode == 0
     except Exception:
@@ -463,7 +466,7 @@ def splice_extensions(text: str, entries: dict, remove: list[str]) -> str | None
     drop = set(entries) | set(remove)
     kept: list[str] = []
     skipping = False
-    for ln in lines[start + 1:end]:
+    for ln in lines[start + 1 : end]:
         key = re.match(r"  (\S[^:]*):\s*(#.*)?$", ln)
         if key:
             skipping = key.group(1).strip("'\"") in drop
@@ -479,7 +482,7 @@ def splice_extensions(text: str, entries: dict, remove: list[str]) -> str | None
         added += "".join("  " + ln if ln.strip() else ln for ln in dumped.splitlines(keepends=True))
     tail = lines[end:]
     sep = ["\n"] if tail and tail[0].strip() else []
-    body = "".join(lines[:start + 1] + kept)
+    body = "".join(lines[: start + 1] + kept)
     if kept and not kept[-1].endswith("\n"):
         body += "\n"
     return body + added + "".join(sep + tail)
@@ -769,9 +772,7 @@ def run_install(args: argparse.Namespace) -> None:
         detected = find_headless_browser()
         if detected:
             print(f"🔍 Auto-detected headless browser: {detected}")
-            browser_path = detected if args.non_interactive else interactive_prompt(
-                "Confirm browser path", detected
-            )
+            browser_path = detected if args.non_interactive else interactive_prompt("Confirm browser path", detected)
         elif not args.non_interactive:
             browser_path = interactive_prompt("Enter browser executable path (or Enter to skip)")
 
@@ -781,8 +782,8 @@ def run_install(args: argparse.Namespace) -> None:
         detected_lo = find_libreoffice()
         if detected_lo:
             print(f"🔍 Auto-detected LibreOffice: {detected_lo}")
-            libreoffice_path = detected_lo if args.non_interactive else interactive_prompt(
-                "Confirm LibreOffice path", detected_lo
+            libreoffice_path = (
+                detected_lo if args.non_interactive else interactive_prompt("Confirm LibreOffice path", detected_lo)
             )
         elif has_flatpak_libreoffice():
             print("🔍 Found LibreOffice Flatpak (org.libreoffice.LibreOffice)")
@@ -798,8 +799,8 @@ def run_install(args: argparse.Namespace) -> None:
         detected_dio = find_drawio()
         if detected_dio:
             print(f"🔍 Auto-detected draw.io: {detected_dio}")
-            drawio_path = detected_dio if args.non_interactive else interactive_prompt(
-                "Confirm draw.io path", detected_dio
+            drawio_path = (
+                detected_dio if args.non_interactive else interactive_prompt("Confirm draw.io path", detected_dio)
             )
         elif has_flatpak_drawio():
             print("🔍 Found draw.io Flatpak (com.jgraph.drawio.desktop)")
