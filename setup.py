@@ -438,8 +438,13 @@ def atomic_write(path: Path, text: str, mode: int = 0o600) -> None:
 
 
 def backup_file(path: Path, keep: int = 5) -> Path:
-    """Copy `path` to a timestamped `.bak-*` sibling and prune all but the newest `keep` backups."""
-    dst = path.with_name(f"{path.name}.bak-{time.strftime('%Y%m%d-%H%M%S')}")
+    """Copy `path` to a timestamped `.bak-*` sibling (never replacing one) and prune all but the newest `keep`."""
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    dst = path.with_name(f"{path.name}.bak-{stamp}")
+    counter = 1
+    while dst.exists():  # two runs in the same second must not replace the earlier copy
+        counter += 1
+        dst = path.with_name(f"{path.name}.bak-{stamp}-{counter}")
     shutil.copy2(path, dst)
     os.chmod(dst, 0o600)
     for old in sorted(path.parent.glob(f"{path.name}.bak-*"))[:-keep]:
@@ -618,25 +623,46 @@ def remove_from_goose_config() -> None:
     print(f"🧹 Removed CREPE from Goose config: {GOOSE_CONFIG_PATH}")
 
 
+def write_json_config(config_path: Path, client_name: str, config: dict, original: str | None) -> bool:
+    """Write `config` over `config_path` atomically, after a timestamped backup of the existing file.
+
+    Returns False (and leaves the file as it was) when the write fails.
+    """
+    text = json.dumps(config, indent=2, ensure_ascii=False)
+    if original is not None and text == original:
+        return True
+    try:
+        if config_path.exists():
+            backup_path = backup_file(config_path)
+            print(f"🗂️  Backed up {client_name} config to {backup_path}")
+        atomic_write(config_path, text)
+    except OSError as e:
+        config_path.with_name(config_path.name + ".tmp").unlink(missing_ok=True)
+        print(f"❌ Could not write the {client_name} config ({config_path}): {e}", file=sys.stderr)
+        return False
+    return True
+
+
 def update_json_mcp_config(
     config_path: Path,
     client_name: str,
     envs: dict[str, str],
 ) -> bool:
-    """Register or update CREPE in standard JSON mcpServers format (AGY CLI / Claude)."""
+    """Register or update CREPE in standard JSON mcpServers format (AGY CLI / Claude).
+
+    The existing file is backed up with a timestamp (the newest five are kept, so a later install never replaces
+    the pristine copy) and rewritten atomically; a config that is already up to date is left untouched.
+    """
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config: dict = {}
+    original: str | None = None
     if config_path.exists():
         try:
-            with open(config_path, encoding="utf-8") as f:
-                config = json.load(f) or {}
+            original = config_path.read_text(encoding="utf-8")
+            config = json.loads(original) or {}
         except Exception as e:
             print(f"❌ Failed to parse {client_name} config ({config_path}): {e}")
             return False
-        backup_path = config_path.with_suffix(".json.bak")
-        shutil.copy2(config_path, backup_path)
-        os.chmod(backup_path, 0o600)
-        print(f"🗂️  Backed up {client_name} config to {backup_path}")
 
     mcp_servers = config.setdefault("mcpServers", {})
 
@@ -650,20 +676,19 @@ def update_json_mcp_config(
         }
     print(f"📦 Configured {client_name} mode: {len(SUB_SERVERS)} Separate Sub-Servers")
 
-    with open(config_path, "w", encoding="utf-8") as f:
-        json.dump(config, f, indent=2, ensure_ascii=False)
-    os.chmod(config_path, 0o600)
+    if not write_json_config(config_path, client_name, config, original):
+        return False
     print(f"✅ Registered CREPE in {client_name} config: {config_path}")
     return True
 
 
 def remove_from_json_mcp_config(config_path: Path, client_name: str) -> None:
-    """Remove CREPE entries from standard JSON mcpServers config."""
+    """Remove CREPE entries from standard JSON mcpServers config (backed up first, written atomically)."""
     if not config_path.exists():
         return
     try:
-        with open(config_path, encoding="utf-8") as f:
-            config = json.load(f) or {}
+        original = config_path.read_text(encoding="utf-8")
+        config = json.loads(original) or {}
     except Exception as e:
         print(f"⚠️ Warning: Failed to parse {config_path}: {e}")
         return
@@ -677,9 +702,7 @@ def remove_from_json_mcp_config(config_path: Path, client_name: str) -> None:
         if sub["name"] in mcp_servers:
             del mcp_servers[sub["name"]]
             modified = True
-    if modified:
-        with open(config_path, "w", encoding="utf-8") as f:
-            json.dump(config, f, indent=2, ensure_ascii=False)
+    if modified and write_json_config(config_path, client_name, config, original):
         print(f"🧹 Removed CREPE from {client_name} config: {config_path}")
 
 

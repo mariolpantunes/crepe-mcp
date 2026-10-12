@@ -8,6 +8,7 @@ import re
 import sys
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -282,6 +283,60 @@ class GooseConfigTests(unittest.TestCase):
         self.setup.GOOSE_CONFIG_PATH.write_text("extensions: [unclosed\n")
         self.assertFalse(self.setup.update_goose_config({}))
         self.assertEqual(self.setup.GOOSE_CONFIG_PATH.read_text(), "extensions: [unclosed\n")
+
+
+class JsonConfigTests(unittest.TestCase):
+    """The JSON client configs (Claude, AGY) are the user's own files: keep every original, write atomically."""
+
+    ORIGINAL = {"theme": "dark", "mcpServers": {"other": {"command": "x"}}}
+
+    def setUp(self):
+        import json
+
+        self.json = json
+        self.setup = load_setup()
+        self.tmp = tempfile.TemporaryDirectory()
+        self.path = Path(self.tmp.name) / ".claude.json"
+        self.path.write_text(json.dumps(self.ORIGINAL))
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def backups(self) -> list[Path]:
+        return sorted(self.path.parent.glob(".claude.json.bak*"))
+
+    def test_the_pristine_backup_survives_later_installs(self):
+        self.assertTrue(self.setup.update_json_mcp_config(self.path, "Test", {}))
+        first = self.backups()
+        self.assertEqual(len(first), 1)
+        self.assertEqual(self.json.loads(first[0].read_text()), self.ORIGINAL)
+        self.assertTrue(self.setup.update_json_mcp_config(self.path, "Test", {"CREPE_DRAWIO_PATH": "/x"}))
+        self.assertEqual(self.json.loads(first[0].read_text()), self.ORIGINAL)
+        self.assertGreaterEqual(len(self.backups()), 1)
+        self.assertIn("CREPE_DRAWIO_PATH", self.path.read_text())
+
+    def test_an_unchanged_config_is_not_rewritten_or_backed_up(self):
+        self.assertTrue(self.setup.update_json_mcp_config(self.path, "Test", {}))
+        before, count = self.path.read_text(), len(self.backups())
+        self.assertTrue(self.setup.update_json_mcp_config(self.path, "Test", {}))
+        self.assertEqual(self.path.read_text(), before)
+        self.assertEqual(len(self.backups()), count)
+
+    def test_a_failed_write_leaves_the_config_intact(self):
+        original = self.path.read_text()
+        with unittest.mock.patch.object(self.setup.os, "replace", side_effect=OSError("disk full")):
+            self.assertFalse(self.setup.update_json_mcp_config(self.path, "Test", {}))
+        self.assertEqual(self.path.read_text(), original)
+        self.assertEqual(list(self.path.parent.glob("*.tmp")), [])
+
+    def test_removal_backs_up_and_keeps_other_servers(self):
+        self.setup.update_json_mcp_config(self.path, "Test", {})
+        for backup in self.backups():
+            backup.unlink()
+        self.setup.remove_from_json_mcp_config(self.path, "Test")
+        self.assertEqual(self.json.loads(self.path.read_text()), self.ORIGINAL)
+        self.assertEqual(len(self.backups()), 1)
+        self.assertEqual(list(self.path.parent.glob("*.tmp")), [])
 
 
 if __name__ == "__main__":
