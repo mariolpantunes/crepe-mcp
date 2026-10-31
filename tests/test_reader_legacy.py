@@ -14,6 +14,8 @@ from unittest import mock
 from fastmcp.exceptions import ToolError
 from test_reader_server import ReaderTestCase, call, data
 
+from crepe_mcp.exporter import find_libreoffice, office_convert
+
 SAMPLE = "---\ntitle: Old report\n---\n\n# Intro\n\nLegacy sorting text.\n\n## Method\n\nWe sort things.\n"
 SLIDES = "# Deck\n\n## First slide\n\n- one\n- two\n\n## Second slide\n\nText.\n"
 
@@ -65,6 +67,21 @@ class TestLegacyOffice(ReaderTestCase):
                 call("open_document", path=str(self.tmp_path / "old.doc"))
         self.assertIn("LibreOffice", str(caught.exception))
         self.assertIn("docx", str(caught.exception))
+
+
+@unittest.skipUnless(shutil.which("pandoc") and find_libreoffice(), "pandoc and LibreOffice are required")
+class TestRealLibreOffice(ReaderTestCase):
+    def test_a_real_doc_and_ppt_are_read(self):
+        for suffix, fmt, text in ((".doc", "docx", SAMPLE), (".ppt", "pptx", SLIDES)):
+            source = self.tmp_path / f"real{fmt}.md"
+            source.write_text(text, encoding="utf-8")
+            modern = self.tmp_path / f"real.{fmt}"
+            subprocess.run(["pandoc", str(source), "-o", str(modern)], check=True, capture_output=True)
+            legacy = Path(office_convert(find_libreoffice(), str(modern), str(self.tmp_path), suffix[1:], timeout=300))
+            with self.subTest(suffix=suffix):
+                info = data("open_document", path=str(legacy))
+                self.assertEqual((info["format"], info["converted_from"]), (fmt, suffix))
+                self.assertTrue(any(word in " ".join(info["outline"]) for word in ("Method", "First slide")))
 
 
 if __name__ == "__main__":
