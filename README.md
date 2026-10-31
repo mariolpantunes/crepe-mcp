@@ -166,7 +166,7 @@ Reads existing documents without any model, so an agent can work on a long file 
 - **Numbered items**: `list_assets` and `get_asset` return figures, tables (as Markdown), equations (text and TeX), algorithms, listings and references, with the sentences that cite them.
 - **Review marks**: `list_changes` lists the tracked insertions, deletions and comments of a DOCX (author, date, text, the text a comment is attached to, section); the other tools show its accepted view.
 - **Output**: `render_page_image` (a page of a PDF, DOCX, ODT, RTF or PPTX as a PNG or JPEG; Office files need LibreOffice) and `document_to_markdown` (the whole document as an editable `.md`).
-- **Formats**: PDF through PyMuPDF (layout rules relative to each document's own type sizes); DOCX, ODT, RTF, EPUB, HTML, LaTeX, reStructuredText, Markdown, Org, Jupyter, PPTX, XLSX and CSV through pandoc's AST. Formats without pages are cut into logical pages of about 3,500 characters. `CREPE_READER_ROOTS` can restrict the readable folders.
+- **Formats**: PDF through PyMuPDF (layout rules relative to each document's own type sizes); DOCX, ODT, RTF, EPUB, HTML, LaTeX, reStructuredText, Markdown, Org, Jupyter, PPTX, XLSX and CSV through pandoc's AST. Formats without pages are cut into logical pages of about 3,500 characters; a Markdown slide deck is read one frame per page, with TikZ blocks as `diagram` items, speaker notes on request (`read_pages(notes=true)`) and figure files resolved through the deck's `resource-path` (attached by `get_asset` when `images.enabled` is on). `CREPE_READER_ROOTS` can restrict the readable folders.
 
 ---
 
@@ -326,6 +326,10 @@ pre-commit install                                   # hooks mirror CI
 ---
 
 ## Release notes
+
+### 0.4.0
+
+- **Markdown slide decks in `crepe-reader`**: one frame is one page (`page_unit: slide`); TikZ blocks are kept as `diagram` items instead of vanishing; relative figure paths are resolved through the deck's folder and `defaults.yml` `resource-path` and `get_asset` attaches PDF, PNG, JPEG and SVG figures (when images are enabled); `render_page_image` shows figure files; legacy `.doc`, `.xls` and `.ppt` files are converted once by LibreOffice (`converted_from` in `open_document`) and read like their DOCX, XLSX and PPTX twins; sections keep their frame headings; slide figures without text are captioned by their frame; subtitle, author and date are reported; speaker notes with `read_pages(notes=true)`; a deck that cites nothing has no `uncited` list; raw LaTeX text (slide titles set in `center`) is kept. **`images.enabled` is now on by default** (Goose receives the images); set it to `false` in `CREPE_READER_CONFIG` for an agent that drops them.
 
 ### 0.3.1
 

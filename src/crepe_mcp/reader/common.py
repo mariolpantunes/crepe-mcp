@@ -27,7 +27,9 @@ PANDOC_FORMATS: dict[str, str] = {
     ".fb2": "fb2",
     ".xml": "jats",
 }
-SUPPORTED = (".pdf", *PANDOC_FORMATS)
+#: Legacy binary Office formats, converted by LibreOffice to the OOXML format that pandoc reads.
+LEGACY_OFFICE: dict[str, str] = {".doc": "docx", ".xls": "xlsx", ".ppt": "pptx"}
+SUPPORTED = (".pdf", *PANDOC_FORMATS, *LEGACY_OFFICE)
 ROOTS_VAR = "CREPE_READER_ROOTS"
 
 
@@ -39,16 +41,17 @@ def page_span(first: int, last: int) -> str:
     return str(first) if first == last else f"{first}-{last}"
 
 
-def resolve_path(path: str) -> Path:
+def resolve_path(path: str, extra: tuple[str, ...] = ()) -> Path:
     """The document named by the agent: an absolute path to a supported, readable file.
 
-    When CREPE_READER_ROOTS lists folders (separated like PATH), the file must be inside one of them.
+    When CREPE_READER_ROOTS lists folders (separated like PATH), the file must be inside one of them. `extra` adds
+    file suffixes that are accepted besides the document formats (figure files for render_page_image).
     """
     given = Path(path.strip()).expanduser()
     if not given.is_absolute():
         raise ReaderError(f"Pass the absolute path of the document, got {path[:120]!r}.")
     resolved = given.resolve()
-    if resolved.suffix.lower() not in SUPPORTED:
+    if resolved.suffix.lower() not in (*SUPPORTED, *extra):
         raise ReaderError(f"{resolved.suffix or 'This file type'} is not supported. Supported: {', '.join(SUPPORTED)}.")
     roots = [Path(r).expanduser().resolve() for r in os.environ.get(ROOTS_VAR, "").split(os.pathsep) if r.strip()]
     if roots and not any(resolved.is_relative_to(root) for root in roots):

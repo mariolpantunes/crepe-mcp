@@ -12,6 +12,7 @@ import json
 import re
 import sqlite3
 import subprocess
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from functools import cache
 from pathlib import Path
@@ -20,8 +21,14 @@ from typing import Any
 from crepe_mcp.reader.common import ReaderError
 from crepe_mcp.reader.schema import SCHEMA
 
+READER_VERSION = "2"  # bump when the stores of non-PDF files change; they are rebuilt
 PAGE_CHARS = 3500  # target size of a logical page
 PANDOC_TIMEOUT = 120
+SLIDE_MIN_FRAMES = 5  # fewest frames of a Markdown file that may be read as a slide deck
+SLIDE_MEAN_CHARS = 900  # a deck's frames are short: at most this many characters of text on average
+DECK_META_KEYS = ("slide-level", "aspectratio", "theme", "beamer", "header-includes")
+TIKZ_RE = re.compile(r"\\begin\{tikzpicture\}")
+DIAGRAM_SOURCE_MAX = 4000
 NUMBERED_TITLE_RE = re.compile(r"^(\d+(?:\.\d+)*)[.)]?\s+(\S.*)$")
 CAPTION_LABEL_RE = re.compile(r"^(table|figure|fig\.?)\s*(\d+)\s*[.:)\-–—]?\s*(.*)$", re.IGNORECASE | re.DOTALL)
 MENTION_RES = {
@@ -30,7 +37,7 @@ MENTION_RES = {
     "equation": re.compile(r"\b(?:equation|eq\.)\s*\(?(\d+)", re.IGNORECASE),
     "listing": re.compile(r"\blisting\s*(\d+)", re.IGNORECASE),
 }
-LABELS = {"figure": "Figure", "table": "Table", "equation": "Equation", "listing": "Listing"}
+LABELS = {"figure": "Figure", "table": "Table", "equation": "Equation", "listing": "Listing", "diagram": "Diagram"}
 NESTED_BLOCKS = ("BulletList", "OrderedList", "Table", "Figure", "CodeBlock")  # blocks a list item hands on
 
 
@@ -126,7 +133,11 @@ def _meta_text(value: dict[str, Any]) -> str:
 
 
 def metadata(ast: dict[str, Any]) -> dict[str, str]:
-    found = {key: _meta_text(value) for key, value in ast.get("meta", {}).items() if key in ("title", "author", "date")}
+    found = {
+        key: _meta_text(value)
+        for key, value in ast.get("meta", {}).items()
+        if key in ("title", "subtitle", "author", "date")
+    }
     return {key: value.strip() for key, value in found.items() if value.strip()}
 
 
@@ -194,6 +205,101 @@ def table_markdown(table: list[Any]) -> str:
     return "\n".join(lines)
 
 
+# ---- slide decks ---------------------------------------------------------------------------------------------------
+
+
+def _nodes(value: Any) -> Iterator[dict[str, Any]]:
+    """Every pandoc node (a dict with a type tag) below a value."""
+    if isinstance(value, dict):
+        if "t" in value:
+            yield value
+        for item in value.values():
+            yield from _nodes(item)
+    elif isinstance(value, list):
+        for item in value:
+            yield from _nodes(item)
+
+
+def slide_level(ast: dict[str, Any], fmt: str) -> int:
+    """The heading level that makes one slide when the file is a Markdown slide deck, else 0.
+
+    Pandoc's rule gives the level (the highest one that has content right below it). The file counts as a deck when
+    its frames are short and it shows what only slides have (figures, speaker notes, columns, raw LaTeX), or when its
+    metadata sets slide-level, aspectratio, theme or the like.
+    """
+    if fmt != "markdown":
+        return 0
+    blocks: list[dict[str, Any]] = ast["blocks"]
+    meta = ast.get("meta", {})
+    explicit = _meta_text(meta["slide-level"]).strip() if "slide-level" in meta else ""
+    if explicit.isdigit() and int(explicit) > 0:
+        return int(explicit)
+    levels = [
+        block["c"][0]
+        for index, block in enumerate(blocks)
+        if block["t"] == "Header" and index + 1 < len(blocks) and blocks[index + 1]["t"] != "Header"
+    ]
+    if not levels or min(levels) < 2:
+        return 0
+    level = min(levels)
+    frames = [index for index, block in enumerate(blocks) if block["t"] == "Header" and block["c"][0] == level]
+    if len(frames) < SLIDE_MIN_FRAMES:
+        return 0
+    sizes = [
+        len(blocks_text(blocks[start + 1 : end])) for start, end in zip(frames, [*frames[1:], len(blocks)], strict=True)
+    ]
+    if sum(sizes) / len(sizes) > SLIDE_MEAN_CHARS:
+        return 0
+    marked = any(key in meta for key in DECK_META_KEYS) or any(
+        node["t"] == "Image"
+        or node["t"] == "RawBlock"
+        or (node["t"] == "Div" and {"notes", "columns"} & set(node["c"][0][1]))
+        for node in _nodes(blocks)
+    )
+    return level if marked else 0
+
+
+def _balanced(text: str, start: int) -> int:
+    """Index just after the brace group that opens at text[start], or -1."""
+    depth = 0
+    for index in range(start, len(text)):
+        if text[index] == "{":
+            depth += 1
+        elif text[index] == "}":
+            depth -= 1
+            if depth == 0:
+                return index + 1
+    return -1
+
+
+def latex_text(source: str, line_break: str = "\n") -> str:
+    """The visible text of a LaTeX fragment: environments, spacing and font commands removed, `\\\\` a line break."""
+    text = re.sub(r"\\(?:begin|end|vspace|hspace)\*?\{[^}]*\}", " ", source)
+    text = re.sub(r"\\\\(?:\[[^\]]*\])?", "\n", text)
+    text = re.sub(r"\\([_&%#$])", r"\1", text)
+    text = re.sub(r"\\[a-zA-Z]+\*?", " ", text).replace("{", "").replace("}", "")
+    return line_break.join(line for line in (" ".join(raw.split()) for raw in text.split("\n")) if line)
+
+
+def tikz_labels(source: str) -> list[str]:
+    """The visible text of the \\node labels of a TikZ picture, one per node, TeX commands removed."""
+    labels: list[str] = []
+    for node in re.finditer(r"\\node\b", source):
+        end = source.find(";", node.end())
+        brace = source.find("{", node.end(), end if end > 0 else len(source))
+        while brace > 0 and source.count("[", node.end(), brace) > source.count("]", node.end(), brace):
+            brace = source.find("{", brace + 1)  # a brace inside the [options]
+        if brace < 0:
+            continue
+        close = _balanced(source, brace)
+        if close < 0:
+            continue
+        label = latex_text(source[brace + 1 : close - 1], " / ")
+        if label:
+            labels.append(label)
+    return labels
+
+
 # ---- builder -------------------------------------------------------------------------------------------------------
 
 
@@ -227,12 +333,18 @@ class _Walker:
     counts: dict[str, int] = field(default_factory=dict)
     stack: list[tuple[int, int]] = field(default_factory=list)  # (level, section id)
     taken: set[str] = field(default_factory=set)  # asset ids already given out
+    slide_level: int = 0  # heading level of one slide when the file is a deck, else 0
+    frame: int = 0  # slides started so far
+    pending: bool = False  # a section heading waits for its first slide
+    frame_title: str = ""
 
     def add(self, kind: str, text: str, level: int = 0) -> _Para:
         section = self.stack[-1][1] if self.stack else 0
         if kind == "heading":
             section = len(self.sections) + 1
         para = _Para(len(self.paragraphs) + 1, kind, section, text, level)
+        if self.slide_level:
+            para.page = self.frame + (1 if self.pending or self.frame == 0 else 0)
         self.paragraphs.append(para)
         return para
 
@@ -268,6 +380,12 @@ class _Walker:
         while self.stack and self.stack[-1][0] >= level:
             self.stack.pop()
         parent = self.stack[-1][1] if self.stack else 0
+        if self.slide_level and level <= self.slide_level:
+            self.pending = level < self.slide_level
+            self.frame_title = ""
+            if level == self.slide_level:
+                self.frame += 1
+                self.frame_title = text
         para = self.add("heading", text, level)
         self.sections.append(
             {
@@ -304,7 +422,14 @@ class _Walker:
         elif kind == "BlockQuote":
             self.blocks(content)
         elif kind == "Div":
-            self.blocks(content[1])
+            if "notes" in content[0][1]:
+                notes = blocks_text(content[1])
+                if notes:
+                    self.add("notes", notes)
+            else:
+                self.blocks(content[1])
+        elif kind == "RawBlock":
+            self.raw(content[0], content[1])
         elif kind in ("BulletList", "OrderedList"):
             for item in content if kind == "BulletList" else content[1]:
                 self.list_item(item)
@@ -345,10 +470,27 @@ class _Walker:
             if node["t"] == "Math" and node["c"][0]["t"] == "DisplayMath":
                 self.asset("equation", "", node["c"][1], "latex", para.id, None)
 
+    def raw(self, fmt: str, source: str) -> None:
+        """A TikZ picture becomes a diagram item; other raw LaTeX keeps its visible text; HTML comments are ignored."""
+        if fmt not in ("latex", "tex"):
+            return
+        if not TIKZ_RE.search(source):
+            if text := latex_text(source):
+                self.add("text", text)
+            return
+        labels = tikz_labels(source)
+        number = self.next_number("diagram")
+        para = self.add("text", f"[diagram {number}] " + (" | ".join(labels) if labels else "(no node labels)"))
+        content = "Node labels:\n" + "\n".join(f"- {label}" for label in labels) if labels else "No node labels."
+        content += "\n\nTikZ source:\n" + source.strip()[:DIAGRAM_SOURCE_MAX]
+        self.assets.append(_Asset(f"diagram:{number}", "diagram", number, self.frame_title, content, "text", para.id))
+
     def image(self, caption: str, url: str, alt: str) -> None:
         label = CAPTION_LABEL_RE.match(caption)
         explicit = label.group(2) if label and "table" not in label.group(1).lower() else None
         stripped = label.group(3).strip() if label and explicit else caption
+        if self.slide_level and not (stripped or alt):
+            stripped = self.frame_title  # a slide figure without text is named by its slide
         number = self.next_number("figure", explicit)
         para = self.add("caption", f"Figure {number}. {stripped or alt or url}".strip())
         self.assets.append(_Asset(f"figure:{number}", "figure", number, stripped, f"![{alt}]({url})", "text", para.id))
@@ -412,14 +554,20 @@ def _unit_text(para: _Para) -> str:
     return f"{'#' * min(para.level, 6)} {para.text}" if para.kind == "heading" else para.text
 
 
-def build(path: Path, fmt: str, db: Path, meta: dict[str, str]) -> None:
-    """Write the document store for a non-PDF file (same tables as the PDF builder)."""
+def build(path: Path, fmt: str, db: Path, meta: dict[str, str], name: str = "") -> None:
+    """Write the document store for a non-PDF file (same tables as the PDF builder); name is the file name to report
+    when the file read is a converted copy."""
     ast = parse(path, fmt)
-    walker = _Walker()
+    walker = _Walker(slide_level=slide_level(ast, fmt))
     walker.blocks(ast["blocks"])
     if not walker.paragraphs:
         raise ReaderError(f"{path.name!r} has no readable text.")
-    pages = _paginate(walker.paragraphs)
+    if walker.slide_level:
+        pages = max(walker.frame, 1)  # one slide is one page; a trailing section heading joins the last slide
+        for para in walker.paragraphs:
+            para.page = min(para.page, pages)
+    else:
+        pages = _paginate(walker.paragraphs)
     by_id = {p.id: p for p in walker.paragraphs}
     for asset in walker.assets:
         asset.page = by_id[asset.paragraph].page
@@ -444,14 +592,15 @@ def build(path: Path, fmt: str, db: Path, meta: dict[str, str]) -> None:
                     **meta,
                     **{f"doc_{k}": v for k, v in properties.items()},
                     "pages": str(pages),
-                    "file_name": path.name,
+                    **({"slide_level": str(walker.slide_level)} if walker.slide_level else {}),
+                    "file_name": name or path.name,
                     "format": fmt,
                     "pandoc_version": pandoc_version(),
                 }.items()
             ),
         )
         for number in range(1, pages + 1):
-            mine = [p for p in walker.paragraphs if p.page == number]
+            mine = [p for p in walker.paragraphs if p.page == number and p.kind != "notes"]
             text = "\n\n".join(_unit_text(p) for p in mine)
             figures = sum(1 for a in walker.assets if a.kind == "figure" and a.page == number)
             con.execute(

@@ -35,6 +35,8 @@ document_to_markdown(path, output_path, part?, overwrite?)   -> whole document a
 ## Limits
 
 - Tables, equations and figures are located by rules, not by a model; `list_assets` flags items it could not locate. Check important numbers against the page image.
-- Images are attached to `get_asset` only for PDFs and only if the server enables them.
+- Images are attached to `get_asset` only if the server enables them (`images.enabled`). PDF items are cropped; figures of a Markdown deck are found through the deck's folder and the `resource-path` of the `defaults.yml` next to it (relative PDF, PNG, JPEG, SVG paths only) and the reply gives `resolved_path` or why the file is missing. `render_page_image` also shows a PNG, JPEG or SVG figure file.
+- Legacy `.doc`, `.xls` and `.ppt` files are converted once by LibreOffice (which must be installed) and then read like DOCX, XLSX and PPTX; `open_document` shows `converted_from`.
+- A Markdown slide deck (short frames with figures, notes, columns or raw LaTeX, or `slide-level` set) is read with `page_unit: slide`: one frame is one page, `read_section` keeps the frame headings as `## Title`, TikZ blocks are `diagram` items (node labels and source, marker `[diagram N]`), assets carry their `frame`, `open_document` gives subtitle, author and date, and `read_pages(notes=true)` adds the speaker notes.
 - `CREPE_READER_ROOTS` (folders separated like PATH) can restrict the readable folders; a path outside them is refused.
 - Extraction is cached under the system temp folder (`CREPE_SCRATCH_BASE`); a changed file is read again.

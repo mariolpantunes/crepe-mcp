@@ -69,15 +69,15 @@ def _find_libreoffice() -> list[str] | None:
     return None
 
 
-def _office_to_pdf(cmd_prefix: list[str], source: str, output_dir: str, timeout: int = 120) -> str:
-    """Convert an Office file (PPTX, DOCX, ODT, ...) to `<output_dir>/<name>.pdf` with LibreOffice headless."""
+def _office_convert(cmd_prefix: list[str], source: str, output_dir: str, target: str, timeout: int = 120) -> str:
+    """Convert an Office file to `<output_dir>/<name>.<target>` (pdf, docx, xlsx, ...) with LibreOffice headless."""
     with tempfile.TemporaryDirectory(prefix="crepe_lo_") as profile_dir:
         # -env:UserInstallation isolates this invocation from any running LibreOffice instance or leftover lock
         cmd = cmd_prefix + [
             f"-env:UserInstallation=file://{profile_dir}",
             "--headless",
             "--convert-to",
-            "pdf",
+            target,
             "--outdir",
             output_dir,
             source,
@@ -85,15 +85,20 @@ def _office_to_pdf(cmd_prefix: list[str], source: str, output_dir: str, timeout:
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
         except subprocess.TimeoutExpired as exc:
-            raise RuntimeError(f"LibreOffice timed out converting {os.path.basename(source)!r} to PDF") from exc
+            raise RuntimeError(f"LibreOffice timed out converting {os.path.basename(source)!r} to {target}") from exc
         if result.returncode != 0:
-            raise RuntimeError(f"LibreOffice failed to convert document to PDF:\n{result.stderr.strip()}")
+            raise RuntimeError(f"LibreOffice failed to convert document to {target}:\n{result.stderr.strip()}")
 
     base = os.path.splitext(os.path.basename(source))[0]
-    pdf_path = os.path.join(output_dir, base + ".pdf")
-    if not os.path.isfile(pdf_path):
-        raise RuntimeError(f"LibreOffice did not produce the expected PDF: {pdf_path!r}")
-    return pdf_path
+    converted = os.path.join(output_dir, f"{base}.{target}")
+    if not os.path.isfile(converted):
+        raise RuntimeError(f"LibreOffice did not produce the expected {target.upper()}: {converted!r}")
+    return converted
+
+
+def _office_to_pdf(cmd_prefix: list[str], source: str, output_dir: str, timeout: int = 120) -> str:
+    """Convert an Office file (PPTX, DOCX, ODT, ...) to `<output_dir>/<name>.pdf` with LibreOffice headless."""
+    return _office_convert(cmd_prefix, source, output_dir, "pdf", timeout)
 
 
 def _render_office_to_pngs(
@@ -114,6 +119,7 @@ def _render_office_to_pngs(
 # Public aliases — use these in preference to private names.
 render_via_libreoffice = _render_office_to_pngs
 office_to_pdf = _office_to_pdf
+office_convert = _office_convert
 find_libreoffice = _find_libreoffice
 
 

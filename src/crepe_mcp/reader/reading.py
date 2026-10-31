@@ -36,11 +36,18 @@ def parse_section_cursor(cursor: str) -> tuple[int, int]:
 
 
 def read_pages(
-    store: DocumentStore, first: int, last: int, offset: int = 0, scope: str = "", omission: str = ""
+    store: DocumentStore,
+    first: int,
+    last: int,
+    offset: int = 0,
+    scope: str = "",
+    omission: str = "",
+    notes: bool = False,
 ) -> tuple[str, list[int]]:
     """Whole pages first..last up to the budget, as plain text under a status line, and the pages returned whole. A
     page that does not fit is left for the next cursor; only a single page larger than the budget is split, at a line
-    break, with a 'p<page>@<offset>' cursor. With an omission line the reference list entries are left out."""
+    break, with a 'p<page>@<offset>' cursor. With an omission line the reference list entries are left out. With
+    notes the speaker notes of a slide are added under its text."""
     total = store.page_count
     for value in (first, last):
         if not 1 <= value <= total:
@@ -53,9 +60,12 @@ def read_pages(
     used = 0
     read_last = first
     next_cursor: str | None = None
+    spoken = store.notes(first, last) if notes else {}
     for page in store.reading_pages(first, last, omission):
         number = page["page"]
         start = offset if number == first else 0
+        if number in spoken:
+            page["text"] += f"\n\n[speaker notes]\n{spoken[number]}"
         text = page["text"][start:]
         if not page["text"]:
             text = "[no text layer on this page: scanned image]" if page["source"] == "none" else "[blank page]"
@@ -107,7 +117,15 @@ def read_section(store: DocumentStore, heading: str, first: int, last: int, curs
         raise ReaderError(
             f"No heading matches {heading[:80]!r}. Headings: {labels}. Pass one of them, or use search_document."
         )
-    paragraphs = [p for p in store.section_paragraphs(match["id"]) if p["page"] <= last]
+    paragraphs = [p for p in store.section_paragraphs(match["id"]) if p["page"] <= last and p["kind"] != "notes"]
+    if store.meta().get("format"):  # text flows keep the sub-headings of a section as Markdown headings
+        levels = store.heading_levels()
+        paragraphs = [
+            {**p, "text": f"{'#' * min(levels[p['id']], 6)} {p['text']}"}
+            if p["kind"] == "heading" and p["id"] in levels and position
+            else p
+            for position, p in enumerate(paragraphs)
+        ]
     index, offset = parse_section_cursor(cursor) if cursor else (0, 0)
     if cursor and (index >= len(paragraphs) or offset > len(paragraphs[index]["text"])):
         raise ReaderError("The cursor is outside this section: start again without a cursor.")

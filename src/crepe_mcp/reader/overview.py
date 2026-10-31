@@ -29,6 +29,16 @@ def part_range(store: DocumentStore, part: str) -> tuple[int, int]:
     return min(s["first_page"] for s in segments), max(s["last_page"] for s in segments)
 
 
+def is_deck(meta: dict[str, str]) -> bool:
+    return bool(meta.get("slide_level"))
+
+
+def _page_unit(meta: dict[str, str]) -> str:
+    if is_deck(meta):
+        return "slide"
+    return "logical page (a reading chunk, not a printed page)" if meta.get("format") else "PDF page"
+
+
 def title(store: DocumentStore) -> str:
     """Document title: its metadata, else the first heading (formats with a text flow), else the first run of lines
     in the largest type of the first page (PDF)."""
@@ -63,10 +73,12 @@ def overview(store: DocumentStore, path: Path) -> dict[str, Any]:
         "file": path.name,
         "format": meta.get("format") or "pdf",
         "pages": store.page_count,
-        "page_unit": "logical page (a reading chunk, not a printed page)" if meta.get("format") else "PDF page",
+        "page_unit": _page_unit(meta),
         "title": title(store),
     }
-    for key in ("author", "date"):
+    if meta.get("converted_from"):
+        reply["converted_from"] = meta["converted_from"]
+    for key in ("subtitle", "author", "date"):
         if meta.get(f"doc_{key}"):
             reply[key] = meta[f"doc_{key}"]
     if len(segments) > 1 or any(s["kind"] != "manuscript" for s in segments):
@@ -88,8 +100,12 @@ def overview(store: DocumentStore, path: Path) -> dict[str, Any]:
     ]
     assets = store.assets()
     reply["numbered_items"] = dict(sorted(Counter(a["kind"] for a in assets).items()))
-    reply["uncited_items"] = [a["id"] for a in assets if a["cited"] == 0 and a["kind"] != "reference"]
+    if any(a["cited"] for a in assets) or not is_deck(meta):  # a deck that cites nothing has no uncited items
+        reply["uncited_items"] = [a["id"] for a in assets if a["cited"] == 0 and a["kind"] != "reference"]
     unreadable = [p["page"] for p in store.pages() if p["source"] == "none"]
+    warnings = []
     if unreadable:
-        reply["warnings"] = [f"pages {unreadable} have no text layer (e.g. scanned images); their text cannot be read"]
+        warnings.append(f"pages {unreadable} have no text layer (e.g. scanned images); their text cannot be read")
+    if warnings:
+        reply["warnings"] = warnings
     return reply

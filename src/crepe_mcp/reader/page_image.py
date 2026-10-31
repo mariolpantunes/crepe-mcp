@@ -19,12 +19,13 @@ import pymupdf
 from crepe_mcp.exporter import find_libreoffice, office_to_pdf
 from crepe_mcp.reader.common import ReaderError
 from crepe_mcp.reader.config import scratch_base
+from crepe_mcp.reader.figures import RASTER_SUFFIXES
 
 ImageFormat = Literal["png", "jpeg"]
 #: Output file suffixes accepted for each format.
 SUFFIXES: dict[str, tuple[str, ...]] = {"png": (".png",), "jpeg": (".jpg", ".jpeg")}
 #: Formats that LibreOffice can lay out into pages.
-OFFICE_SUFFIXES = (".docx", ".odt", ".rtf", ".pptx")
+OFFICE_SUFFIXES = (".docx", ".odt", ".rtf", ".pptx", ".doc", ".ppt")
 JPEG_QUALITY = 85
 CONVERT_TIMEOUT = 180
 CACHE_MAX_AGE = 7 * 24 * 3600  # seconds a converted PDF is kept after its last use
@@ -97,13 +98,16 @@ def render_page(source: Path, page: int, dpi: int, fmt: ImageFormat) -> tuple[by
     deck), which differs from the logical pages that read_pages uses.
     """
     suffix = source.suffix.lower()
-    if suffix == ".pdf":
+    if suffix in (*RASTER_SUFFIXES, ".svg"):
+        pdf = source  # a figure file is a one-page document for pymupdf
+    elif suffix == ".pdf":
         pdf = source
     elif suffix in OFFICE_SUFFIXES:
         pdf = _converted_pdf(source)
     else:
         raise ReaderError(
-            f"Pages can be shown for PDF and {', '.join(OFFICE_SUFFIXES)} files, not {suffix}. "
+            f"Pages can be shown for PDF, {', '.join(OFFICE_SUFFIXES)} and figure (PNG, JPEG, SVG) files, "
+            f"not {suffix}. "
             "Use document_to_markdown to get the content, or save the document as PDF."
         )
     with pymupdf.open(str(pdf)) as doc:

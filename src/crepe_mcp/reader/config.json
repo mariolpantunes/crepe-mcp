@@ -83,8 +83,8 @@
     },
   "images": {
     "enabled": {
-      "value": false,
-      "description": "Attach a cropped image of a numbered item when get_asset asks for one. Off while Goose drops images for custom providers (aaif-goose/goose#11998); turn on once the agent receives them."
+      "value": true,
+      "description": "Attach an image of a numbered item (a crop of a PDF item, a figure file of a deck) when get_asset asks for one. Turn off for an agent that drops images (Goose did for custom providers, aaif-goose/goose#11998)."
     },
     "budget": {
       "value": 4,

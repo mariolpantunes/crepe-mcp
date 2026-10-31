@@ -13,7 +13,9 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import sqlite3
+import tempfile
 import threading
 from collections import OrderedDict
 from collections.abc import Callable
@@ -24,11 +26,12 @@ import pymupdf as fitz
 
 from crepe_mcp.reader import pandoc_reader
 from crepe_mcp.reader.assets import build_assets
-from crepe_mcp.reader.common import PANDOC_FORMATS
+from crepe_mcp.reader.common import LEGACY_OFFICE, PANDOC_FORMATS
 from crepe_mcp.reader.config import scratch_base
 from crepe_mcp.reader.document import extract, measure
 from crepe_mcp.reader.heuristics import DIGEST as HEURISTICS_DIGEST
 from crepe_mcp.reader.indexes import build_indexes
+from crepe_mcp.reader.legacy import convert_legacy
 from crepe_mcp.reader.schema import SCHEMA
 from crepe_mcp.reader.structure import build_structure
 
@@ -58,6 +61,7 @@ def _expected_meta(pdf: Path) -> dict[str, str]:
         return {
             "fingerprint": fingerprint(pdf),
             "extractor_version": EXTRACTOR_VERSION,
+            "pandoc_reader_version": pandoc_reader.READER_VERSION,
             "pandoc_version": pandoc_reader.pandoc_version(),
         }
     return {
@@ -74,11 +78,26 @@ def _build_with_pandoc(path: Path, db: Path, expected: dict[str, str]) -> None:
     os.chmod(db.parent, 0o700)
     tmp = db.with_name(f".{db.name}.{os.getpid()}.{threading.get_ident()}.tmp")
     tmp.unlink(missing_ok=True)
+    legacy = path.suffix.lower() in LEGACY_OFFICE
+    work = Path(tempfile.mkdtemp(prefix="legacy-", dir=db.parent)) if legacy else None  # mkdtemp folders are 0700
     try:
-        pandoc_reader.build(path, PANDOC_FORMATS[path.suffix.lower()], tmp, expected)
+        if work is not None:
+            converted = convert_legacy(path, work)
+            pandoc_reader.build(
+                converted,
+                PANDOC_FORMATS[converted.suffix],
+                tmp,
+                {**expected, "converted_from": path.suffix.lower()},
+                path.name,
+            )
+        else:
+            pandoc_reader.build(path, PANDOC_FORMATS[path.suffix.lower()], tmp, expected)
     except BaseException:
         tmp.unlink(missing_ok=True)
         raise
+    finally:
+        if work is not None:
+            shutil.rmtree(work, ignore_errors=True)
     os.replace(tmp, db)
 
 
@@ -328,6 +347,32 @@ class DocumentStore:
         last = self.page_count if last is None else last
         rows = self._query("SELECT * FROM paragraphs WHERE page BETWEEN ? AND ? ORDER BY id", (first, last))
         return [dict(row) for row in rows]
+
+    def heading_levels(self) -> dict[int, int]:
+        """Heading level of each heading paragraph, by paragraph id."""
+        return {row["paragraph"]: row["level"] for row in self._query("SELECT paragraph, level FROM sections")}
+
+    def notes(self, first: int, last: int) -> dict[int, str]:
+        """Speaker notes of the pages first..last, by page."""
+        sql = "SELECT page, text FROM paragraphs WHERE kind = 'notes' AND page BETWEEN ? AND ? ORDER BY id"
+        found: dict[int, list[str]] = {}
+        for row in self._query(sql, (first, last)):
+            found.setdefault(row["page"], []).append(row["text"])
+        return {page: "\n\n".join(texts) for page, texts in found.items()}
+
+    def frame_of(self, paragraph_id: int) -> str:
+        """Title of the slide a paragraph belongs to (a deck's slide-level heading), else an empty string."""
+        level = int(self.meta().get("slide_level") or 0)
+        row = self._query("SELECT section FROM paragraphs WHERE id = ?", (paragraph_id,))
+        section = row[0]["section"] if row else 0
+        while section:
+            found = self._query("SELECT parent, level, title FROM sections WHERE id = ?", (section,))
+            if not found:
+                break
+            if level and found[0]["level"] == level:
+                return found[0]["title"]
+            section = found[0]["parent"]
+        return ""
 
     def section_paragraphs(self, section_id: int) -> list[dict[str, Any]]:
         """Paragraphs from a section heading up to the next heading of the same or a higher level."""

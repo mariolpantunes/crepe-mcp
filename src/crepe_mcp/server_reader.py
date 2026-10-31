@@ -31,8 +31,9 @@ from pydantic import Field
 
 from crepe_mcp.reader import crops, reading
 from crepe_mcp.reader.common import ReaderError, page_span, resolve_path
+from crepe_mcp.reader.figures import figure_url, image_png, resolve_figure
 from crepe_mcp.reader.markdown_export import export_markdown
-from crepe_mcp.reader.overview import overview, part_range
+from crepe_mcp.reader.overview import is_deck, overview, part_range
 from crepe_mcp.reader.page_image import ImageFormat, check_output_path, render_page
 from crepe_mcp.reader.review_marks import read_marks, summary
 from crepe_mcp.reader.store import DocumentStore
@@ -67,7 +68,7 @@ Part = Annotated[
     Literal["all", "manuscript", "responses", "cover"],
     Field(description="Pages to use: all (default), or a part listed by open_document (manuscript, responses, cover)."),
 ]
-AssetKind = Literal["figure", "table", "equation", "algorithm", "listing", "statement", "reference"]
+AssetKind = Literal["figure", "table", "equation", "algorithm", "listing", "statement", "diagram", "reference"]
 
 
 def _agent_errors[F: Callable[..., Any]](func: F) -> F:
@@ -109,10 +110,13 @@ def read_pages(
         str | None, Field(max_length=20, description="next cursor of the previous reply; overrides the pages.")
     ] = None,
     references: Annotated[bool, Field(description="Include the reference list entries (omitted by default).")] = False,
+    notes: Annotated[
+        bool, Field(description="Add the speaker notes of a slide deck under each slide; pass it again with a cursor.")
+    ] = False,
 ) -> str:
-    """Read whole pages in reading order (about 12,000 characters per call). The first line gives the pages returned
-    and the next cursor: pass it as cursor until it is none. Reference list entries are left out unless
-    references=true (list_assets kind='reference' lists them)."""
+    """Read whole pages in reading order (about 12,000 characters per call; a page is one slide for a Markdown deck).
+    The first line gives the pages returned and the next cursor: pass it as cursor until it is none. Reference list
+    entries are left out unless references=true (list_assets kind='reference' lists them)."""
     _, store = _open(path)
     part_first, part_last = part_range(store, part)
     scope = f"{part} = pages {page_span(part_first, part_last)}"
@@ -125,7 +129,7 @@ def read_pages(
         last = last_page or (part_last if first <= part_last else first)
     last = min(last, store.page_count)
     omission = "" if references else reading.REFERENCES_OMITTED
-    text, _ = reading.read_pages(store, first, last, offset, scope, omission)
+    text, _ = reading.read_pages(store, first, last, offset, scope, omission, notes)
     return text
 
 
@@ -190,6 +194,7 @@ def list_assets(
     everything = store.assets(first=first, last=last)
     shown = [a for a in everything if (a["kind"] == kind if kind else a["kind"] != "reference")]
     items = []
+    deck = is_deck(store.meta())
     for item in shown:
         entry: dict[str, Any] = {
             "id": item["id"],
@@ -202,16 +207,34 @@ def list_assets(
             entry["caption"] = preview[:CAPTION_PREVIEW]
         if item["confidence"] == "low":
             entry["region"] = "not located (caption only)"
+        if deck and (frame := store.frame_of(item["paragraph"])):
+            entry["frame"] = frame
         items.append(entry)
     reply: dict[str, Any] = {
         "pages": page_span(first, last),
         "counts": dict(sorted(Counter(a["kind"] for a in everything).items())),
         "items": items,
-        "uncited": [a["id"] for a in shown if a["cited"] == 0],
     }
+    if any(a["cited"] for a in everything) or not deck:  # a deck that cites nothing has no uncited items
+        reply["uncited"] = [a["id"] for a in shown if a["cited"] == 0]
     if not kind and any(a["kind"] == "reference" for a in everything):
         reply["hint"] = "References are listed with kind='reference'."
     return reply
+
+
+def _figure_image(document: Path, found: dict[str, Any], detail: dict[str, Any], max_side: int) -> Image | None:
+    """The image of a figure of a non-PDF document, resolved through its resource path; notes the outcome."""
+    if found["kind"] != "figure":
+        detail["image"] = "not attached: only figures of a non-PDF document have an image file"
+        return None
+    url = figure_url(found["content"])
+    figure, note = resolve_figure(document, url)
+    if figure is None:
+        detail["image"] = f"not attached: {note}"
+        return None
+    detail["resolved_path"] = str(figure)
+    detail["image"] = "attached"
+    return Image(data=image_png(figure, max_side), format="png")
 
 
 @mcp.tool(annotations={"readOnlyHint": True})
@@ -260,14 +283,16 @@ def get_asset(
         "cited_count": len(mentions),
         "cited_by": cited_by,
     }
+    if is_deck(store.meta()) and (frame := store.frame_of(found["paragraph"])):
+        detail["frame"] = frame
     image: Image | None = None
     images = crops.settings()
     if not include_image:
         detail["image"] = "not requested"
-    elif resolved.suffix.lower() != ".pdf":
-        detail["image"] = "not attached: images are cropped from PDF files only"
     elif not images["enabled"]:
         detail["image"] = "not attached: images are disabled on this server; rely on the caption and content"
+    elif resolved.suffix.lower() != ".pdf":
+        image = _figure_image(resolved, found, detail, int(images["max_side"]))
     elif found["x0"] is None:
         detail["image"] = "not attached: no region was located for this item"
     else:
@@ -318,7 +343,7 @@ def render_page_image(
     """Show one page of a PDF, DOCX, ODT, RTF or PPTX as an image (for layout, figures and scans that text cannot
     describe). Office files are laid out by LibreOffice, so it must be installed. With output_path the image is
     saved there (e.g. to embed it in a deck) and its size is returned."""
-    resolved = resolve_path(path)
+    resolved = resolve_path(path, extra=(".png", ".jpg", ".jpeg", ".svg"))
     target = check_output_path(output_path, format) if output_path is not None else None
     data, count = render_page(resolved, page, dpi, format)
     if target is None:
