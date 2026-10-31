@@ -327,6 +327,10 @@ pre-commit install                                   # hooks mirror CI
 
 ## Release notes
 
+### 0.4.1
+
+- **Legacy Office files checked against a real LibreOffice**: `.doc`, `.xls` and `.ppt` read through the flatpak install as well as a native one (absolute paths only); a test converts and reads real files when pandoc and LibreOffice are present. No change for users of 0.4.0.
+
 ### 0.4.0
 
 - **Markdown slide decks in `crepe-reader`**: one frame is one page (`page_unit: slide`); TikZ blocks are kept as `diagram` items instead of vanishing; relative figure paths are resolved through the deck's folder and `defaults.yml` `resource-path` and `get_asset` attaches PDF, PNG, JPEG and SVG figures (when images are enabled); `render_page_image` shows figure files; legacy `.doc`, `.xls` and `.ppt` files are converted once by LibreOffice (`converted_from` in `open_document`) and read like their DOCX, XLSX and PPTX twins; sections keep their frame headings; slide figures without text are captioned by their frame; subtitle, author and date are reported; speaker notes with `read_pages(notes=true)`; a deck that cites nothing has no `uncited` list; raw LaTeX text (slide titles set in `center`) is kept. **`images.enabled` is now on by default** (Goose receives the images); set it to `false` in `CREPE_READER_CONFIG` for an agent that drops them.
