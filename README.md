@@ -330,6 +330,7 @@ pre-commit install                                   # hooks mirror CI
 ### 0.4.1
 
 - **Legacy Office files checked against a real LibreOffice**: `.doc`, `.xls` and `.ppt` read through the flatpak install as well as a native one (absolute paths only); a test converts and reads real files when pandoc and LibreOffice are present. No change for users of 0.4.0.
+- **`pymupdf` is capped below 2.0**: PyMuPDF 2.0 (released after 0.3.1) locates fewer tables in the PDF reader (`caption` instead of `caption+table`), which broke CI on a fresh install; the reader is tested on 1.28. Moving to 2.0 needs its own pass over the table rules.
 
 ### 0.4.0
 
