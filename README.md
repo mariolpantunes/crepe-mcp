@@ -329,6 +329,12 @@ pre-commit install                                   # hooks mirror CI
 
 ## Release notes
 
+### 0.5.0
+
+- **`openalex_search` in `crepe-research`** (7 tools): OpenAlex works with venue, year, DOI, citation count and abstract; no key needed (the free daily budget is shared per IP address), optional `CREPE_OPENALEX_API_KEY` gives its own budget.
+- **`file://` URLs in `crepe-reader`**: a `file://` URL is a valid `path`; web URLs are refused with a hint (download first, or use `fetch_webpage` for HTML).
+- **Clearer routing for agents**: the skill sends local files and PDFs to `crepe-reader` first; `fetch_webpage` errors on `file://` and bare paths name `open_document`.
+
 ### 0.4.1
 
 - **Legacy Office files checked against a real LibreOffice**: `.doc`, `.xls` and `.ppt` read through the flatpak install as well as a native one (absolute paths only); a test converts and reads real files when pandoc and LibreOffice are present. No change for users of 0.4.0.

@@ -5,7 +5,7 @@ license: MIT
 compatibility: Needs the crepe-* MCP servers (run setup.py --install in the crepe-mcp repo). PDF output needs pandoc and lualatex; PPTX/DOCX previews need LibreOffice; reading non-PDF files needs pandoc; diagrams need draw.io; fetch_webpage uses Chromium.
 metadata:
   author: Mario Antunes
-  version: "0.4.1"
+  version: "0.5.0"
 ---
 
 # crepe

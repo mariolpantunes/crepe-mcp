@@ -8,8 +8,8 @@ authors:
     email: mario.antunes@ua.pt
 repository-code: "https://github.com/mariolpantunes/crepe-mcp"
 license: MIT
-version: 0.4.1
-date-released: "2026-10-31"
+version: 0.5.0
+date-released: "2026-11-06"
 keywords:
   - mcp
   - presentation
