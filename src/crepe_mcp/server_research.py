@@ -1,6 +1,6 @@
-"""CREPE — Research sub-server (Group B, 6 tools).
+"""CREPE — Research sub-server (Group B, 7 tools).
 
-Research and web utilities: Semantic Scholar, arXiv, Tavily web search,
+Research and web utilities: Semantic Scholar, OpenAlex, arXiv, Tavily web search,
 Wikipedia, and Playwright-powered full-page fetching.
 
 Can be run as a standalone MCP server:
@@ -8,13 +8,14 @@ Can be run as a standalone MCP server:
 
 Tools
 -----
-Group B (6):
-  academic_search, arxiv_search, web_search, wikipedia_search, wikipedia_read,
+Group B (7):
+  academic_search, openalex_search, arxiv_search, web_search, wikipedia_search, wikipedia_read,
   fetch_webpage
 
 Environment variables (all CREPE_ prefixed):
   CREPE_TAVILY_API_KEY            — Tavily API key for web_search
   CREPE_SEMANTIC_SCHOLAR_API_KEY  — optional; avoids 429 rate limits
+  CREPE_OPENALEX_API_KEY          — optional; own daily budget instead of the one shared per IP
   CREPE_HEADLESS_BROWSER_PATH     — Chromium path for fetch_webpage
 """
 
@@ -27,7 +28,8 @@ from crepe_mcp.runner import run_server
 
 RESEARCH_INSTRUCTIONS = """\
 CREPE Research Engine Guidelines:
-1. Use academic_search (Semantic Scholar) or arxiv_search for peer-reviewed papers and preprints.
+1. Use academic_search (Semantic Scholar), openalex_search (venue, year, DOI, citations) or arxiv_search for
+   peer-reviewed papers and preprints.
 2. Use web_search for current web data and news (requires CREPE_TAVILY_API_KEY).
 3. Use wikipedia_search followed by wikipedia_read to extract background knowledge.
 4. Use fetch_webpage to extract full article text from http(s) web pages (HTML). It cannot read PDFs or local files:
@@ -45,6 +47,16 @@ def academic_search(query: str, limit: int = 5) -> dict:
     and truncated abstract (400 chars).
     """
     return research.academic_search(query, limit=limit)
+
+
+@mcp.tool
+def openalex_search(query: str, limit: int = 5) -> dict:
+    """Search OpenAlex for scholarly works. No API key required (optional CREPE_OPENALEX_API_KEY).
+
+    Returns title, year, venue, DOI, citation count, link (open-access URL preferred)
+    and truncated abstract (400 chars). Use it for venue, citation and DOI metadata.
+    """
+    return research.openalex_search(query, limit=limit)
 
 
 @mcp.tool

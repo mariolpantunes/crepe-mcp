@@ -21,7 +21,7 @@ flowchart TD
     subgraph FastMCPLayer["CREPE Modular FastMCP 3.X Layer"]
         Pres["crepe-presentations<br/>(15 tools)"]
         Docs["crepe-documents<br/>(12 tools)"]
-        Research["crepe-research<br/>(6 tools)"]
+        Research["crepe-research<br/>(7 tools)"]
         Sheets["crepe-spreadsheets<br/>(4 tools)"]
         Diagrams["crepe-diagrams<br/>(3 tools)"]
     end
@@ -143,9 +143,9 @@ Hierarchical report and article authoring engine for structured academic documen
 - **Section Structuring**: `set_chapter`, `set_section` (nested subsection support), `delete_chapter`.
 - **Compilation & Output**: `export_document_source`, `compile_document` (LuaLaTeX PDF / DOCX), `render_document_as_pngs`, `lint_document`.
 
-### 3. Research & Web Discovery (`crepe-research` — 6 tools)
+### 3. Research & Web Discovery (`crepe-research` — 7 tools)
 Literature discovery and live web extraction with built-in rate limit handling.
-- **Academic Papers**: `academic_search` (queries Semantic Scholar API with citation counts and rate-limit backoff), `arxiv_search` (queries arXiv API for recent preprints).
+- **Academic Papers**: `academic_search` (queries Semantic Scholar API with citation counts and rate-limit backoff), `openalex_search` (queries OpenAlex for venue, year, DOI and citation counts; works without a key), `arxiv_search` (queries arXiv API for recent preprints).
 - **Encyclopedic Knowledge**: `wikipedia_search` (finds relevant topics), `wikipedia_read` (extracts clean text body).
 - **Web Retrieval**: `web_search` (Tavily search integration), `fetch_webpage` (extracts clean markdown with headless Chromium fallback).
 
@@ -264,6 +264,7 @@ loads every enabled schema up front.
 |:---------|:-------------|:-------------------------|
 | `CREPE_TAVILY_API_KEY` | `web_search` tool | Read from the `.env` file (see below) |
 | `CREPE_SEMANTIC_SCHOLAR_API_KEY` | `academic_search` rate limits | Optional, from the `.env` file (public tier used if unset) |
+| `CREPE_OPENALEX_API_KEY` | `openalex_search` daily budget | Optional, from the `.env` file (without it the free budget is shared per IP address) |
 | `CREPE_HEADLESS_BROWSER_PATH` | JavaScript-heavy `fetch_webpage` | Auto-detected from Chromium / Chrome / Brave |
 | `CREPE_LIBREOFFICE_PATH` | PPTX to PNG rendering | Auto-detected (`libreoffice` on PATH or Mac App) |
 | `CREPE_DRAWIO_PATH` | Headless diagram export | Auto-detected (`drawio` / `draw.io` on PATH) |
@@ -275,6 +276,7 @@ loads every enabled schema up front.
 # ~/git/crepe-mcp/.env
 CREPE_TAVILY_API_KEY=tvly-...
 CREPE_SEMANTIC_SCHOLAR_API_KEY=...
+CREPE_OPENALEX_API_KEY=...
 ```
 
 ### API keys

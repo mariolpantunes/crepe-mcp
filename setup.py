@@ -103,7 +103,8 @@ SUB_SERVERS = [
         "enabled": True,
         "description": (
             "Academic and web research. Search peer-reviewed papers on Semantic Scholar "
-            "(academic_search) and preprints on arXiv (arxiv_search), run live web searches "
+            "(academic_search), scholarly works with venue, DOI and citations on OpenAlex "
+            "(openalex_search), preprints on arXiv (arxiv_search), run live web searches "
             "via Tavily (web_search), look up and read Wikipedia articles, and extract the "
             "full readable text of any URL (fetch_webpage). Use for citations, literature "
             "review, fact-checking, and gathering current sources."
@@ -218,6 +219,7 @@ def find_headless_browser() -> str | None:
 API_KEY_VARS = {
     "tavily": ("CREPE_TAVILY_API_KEY", "Tavily API key for web_search"),
     "semantic_scholar": ("CREPE_SEMANTIC_SCHOLAR_API_KEY", "Semantic Scholar API key (optional, avoids 429s)"),
+    "openalex": ("CREPE_OPENALEX_API_KEY", "OpenAlex API key (optional, own daily budget)"),
 }
 
 

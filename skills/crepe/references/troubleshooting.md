@@ -39,6 +39,7 @@ Set by `./setup.py --install`; keys are never written to client configs.
 |----------|---------|---------------------|
 | `CREPE_TAVILY_API_KEY` | `web_search` | `.env` file: `$CREPE_ENV_FILE`, else `~/.config/crepe-mcp/.env`, else `./.env` |
 | `CREPE_SEMANTIC_SCHOLAR_API_KEY` | `academic_search` (optional) | same `.env` |
+| `CREPE_OPENALEX_API_KEY` | `openalex_search` (optional) | same `.env` |
 | `CREPE_HEADLESS_BROWSER_PATH` | `fetch_webpage` | auto-detected Chromium |
 | `CREPE_LIBREOFFICE_PATH` | PPTX/DOCX to PNG | auto-detected LibreOffice |
 | `CREPE_DRAWIO_PATH` | `export_drawio` | auto-detected draw.io |

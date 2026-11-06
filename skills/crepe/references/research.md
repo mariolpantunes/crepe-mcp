@@ -1,10 +1,11 @@
-Read when: finding papers, web pages or background knowledge (server `crepe-research`, 6 tools).
+Read when: finding papers, web pages or background knowledge (server `crepe-research`, 7 tools).
 
 # Research
 
 | Need | Tool | Notes |
 |------|------|-------|
 | Peer-reviewed papers | `academic_search(query, limit=5)` | Semantic Scholar. Works without a key; `CREPE_SEMANTIC_SCHOLAR_API_KEY` only avoids 429s. |
+| Venue, year, DOI, citation count of papers | `openalex_search(query, limit=5)` | OpenAlex. Works without a key (the free daily budget is shared per IP); `CREPE_OPENALEX_API_KEY` gives its own. Use it to pick a venue or check citations. |
 | Preprints (CS, physics, math, AI) | `arxiv_search(query, limit=5)` | No key. |
 | Current web data and news | `web_search(query, max_results=5)` | Tavily. Needs `CREPE_TAVILY_API_KEY`. |
 | Background on a topic | `wikipedia_search(query, limit=3)`, then `wikipedia_read(title, max_chars=15000)` | Search first, read the exact title. |

@@ -628,7 +628,7 @@ class TestT09SubServerExports(unittest.TestCase):
 
         self.assertEqual(len(asyncio.run(pres_mcp.list_tools())), 15)
         self.assertEqual(len(asyncio.run(docs_mcp.list_tools())), 12)
-        self.assertEqual(len(asyncio.run(res_mcp.list_tools())), 6)
+        self.assertEqual(len(asyncio.run(res_mcp.list_tools())), 7)
         self.assertEqual(len(asyncio.run(xl_mcp.list_tools())), 4)
         self.assertEqual(len(asyncio.run(diag_mcp.list_tools())), 3)
         self.assertEqual(len(asyncio.run(reader_mcp.list_tools())), 9)

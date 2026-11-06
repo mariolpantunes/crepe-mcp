@@ -3,6 +3,7 @@
 Environment variables (all prefixed CREPE_):
   CREPE_TAVILY_API_KEY           — enables web_search; warning returned if absent.
   CREPE_SEMANTIC_SCHOLAR_API_KEY — optional key for higher rate limits.
+  CREPE_OPENALEX_API_KEY         — optional free key; without it the daily budget is shared per IP address.
   CREPE_HEADLESS_BROWSER_PATH    — path to a Chromium-compatible browser used by
                                    Playwright for fetch_webpage (e.g. /usr/bin/chromium).
                                    Falls back to urllib if unset or unavailable.
@@ -143,6 +144,92 @@ def academic_search(query: str, limit: int = 5) -> dict:
         papers.append(
             {
                 "title": paper.get("title", ""),
+                "link": link,
+                "abstract": abstract[:400] + ("…" if len(abstract) > 400 else ""),
+            }
+        )
+    return {"papers": papers}
+
+
+OPENALEX_RETRIES = 2
+
+
+def _openalex_abstract(index: object) -> str:
+    """Rebuild the abstract text from OpenAlex's inverted index ({word: [positions]})."""
+    if not isinstance(index, dict):
+        return ""
+    words: dict[int, str] = {}
+    for word, positions in index.items():
+        if isinstance(positions, list):
+            for position in positions:
+                if isinstance(position, int):
+                    words[position] = word
+    return " ".join(words[i] for i in sorted(words))
+
+
+def openalex_search(query: str, limit: int = 5) -> dict:
+    """Search OpenAlex for works (papers, books, preprints) with venue, year, DOI and citation count.
+
+    Works without a key; CREPE_OPENALEX_API_KEY gives the free per-key daily budget instead of the one shared by
+    everyone behind the same IP address.
+    """
+    limit = max(1, min(limit, 100))
+    params = {
+        "search": query,
+        "per-page": str(limit),
+        "select": (
+            "display_name,publication_year,doi,cited_by_count,primary_location,open_access,abstract_inverted_index"
+        ),
+    }
+    api_key = os.environ.get("CREPE_OPENALEX_API_KEY", "").strip()
+    if api_key:
+        params["api_key"] = api_key
+    url = f"https://api.openalex.org/works?{urllib.parse.urlencode(params)}"
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (compatible; CREPE/1.0)"})
+
+    data: dict = {}
+    for attempt in range(OPENALEX_RETRIES + 1):
+        try:
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                data = json.loads(resp.read().decode())
+            break
+        except urllib.error.HTTPError as exc:
+            retry_after = exc.headers.get("Retry-After") if exc.headers else None
+            exc.close()
+            if (exc.code == 429 or exc.code >= 500) and attempt < OPENALEX_RETRIES:
+                time.sleep(_s2_delay(attempt, retry_after))
+                continue
+            if exc.code in (402, 403, 429):
+                return {
+                    "papers": [],
+                    "error": (
+                        f"OpenAlex daily budget or rate limit reached (HTTP {exc.code}). Try later or set "
+                        "CREPE_OPENALEX_API_KEY (free key at https://openalex.org/settings/api)."
+                    ),
+                }
+            return {"papers": [], "error": f"HTTP {exc.code}: {exc}"}
+        except (urllib.error.URLError, TimeoutError) as exc:
+            if attempt == OPENALEX_RETRIES:
+                return {"papers": [], "error": str(exc)}
+            time.sleep(_s2_delay(attempt, None))
+        except Exception as exc:
+            return {"papers": [], "error": str(exc)}
+
+    papers = []
+    for work in data.get("results", []):
+        location = work.get("primary_location") or {}
+        source = location.get("source") or {}
+        open_access = work.get("open_access") or {}
+        doi = work.get("doi") or ""
+        link = open_access.get("oa_url") or doi or location.get("landing_page_url") or "No link available"
+        abstract = _openalex_abstract(work.get("abstract_inverted_index")) or "No abstract available."
+        papers.append(
+            {
+                "title": work.get("display_name") or "",
+                "year": work.get("publication_year"),
+                "venue": source.get("display_name") or "",
+                "doi": doi,
+                "cited_by": work.get("cited_by_count", 0),
                 "link": link,
                 "abstract": abstract[:400] + ("…" if len(abstract) > 400 else ""),
             }
