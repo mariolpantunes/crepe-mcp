@@ -14,10 +14,11 @@ CREPE is six MCP servers, one per domain. Paths below are relative to this skill
 
 ## Steps
 
-1. Pick the task in the table and read only its reference file (it starts with a `Read when:` line).
-2. Make sure the server's tools are available. If they are not listed, the server is disabled: enable it (Goose: `manage_extensions`, action `enable`, the server name) or search the tool by name if your host defers tool schemas. Still missing: read `references/troubleshooting.md`.
-3. Follow the tool order. Call the `lint_*` tool before every compile and fix every issue it returns.
-4. Write compiled files where the user asked (absolute path), then call the `cleanup_*` tool.
+1. Route by the input first: a **local file** (an absolute path or a `file://` URL: PDF, DOCX, Markdown, ...) is always read with `crepe-reader`, starting with `open_document`. Never use `pdftotext`, `cat` or `fetch_webpage` on it. `fetch_webpage` reads **http(s) HTML pages** only; it fails on `file://` and cannot read PDFs. A PDF at a web URL: download it with `curl -L -o /tmp/doc.pdf URL`, then `open_document` on that path.
+2. Pick the task in the table and read only its reference file (it starts with a `Read when:` line).
+3. Make sure the server's tools are available. If they are not listed, the server is disabled: enable it (Goose: `manage_extensions`, action `enable`, the server name) or search the tool by name if your host defers tool schemas. Still missing: read `references/troubleshooting.md`.
+4. Follow the tool order. Call the `lint_*` tool before every compile and fix every issue it returns.
+5. Write compiled files where the user asked (absolute path), then call the `cleanup_*` tool.
 
 ## Tasks
 
@@ -26,8 +27,8 @@ CREPE is six MCP servers, one per domain. Paths below are relative to this skill
 | Slide deck | `crepe-presentations` | `create_presentation`, `set_slide` per slide, `lint_presentation`, `compile_presentation`, `render_slides_as_pngs`, `cleanup_presentation` | `references/presentations.md` |
 | A4 report or paper | `crepe-documents` | `create_document`, `set_chapter` and `set_section`, `lint_document`, `compile_document`, `render_document_as_pngs`, `cleanup_document` | `references/documents.md` |
 | draw.io figure | `crepe-diagrams` | write the `.drawio` (or `scripts/dg.py`), `lint_drawio`, `export_drawio` | `references/diagrams.md` |
-| Papers, web, Wikipedia | `crepe-research` | `academic_search` or `arxiv_search`, `web_search`, `wikipedia_search` then `wikipedia_read`, `fetch_webpage` | `references/research.md` |
-| Read, review or cite an existing file (PDF, DOCX, Markdown, ...) | `crepe-reader` | `open_document`, `read_section` / `search_document` / `read_pages`, `list_assets`, `get_asset`, `list_changes` (DOCX), `render_page_image`, `document_to_markdown` | `references/reader.md` |
+| Papers, web pages, Wikipedia (not local files) | `crepe-research` | `academic_search` or `arxiv_search`, `web_search`, `wikipedia_search` then `wikipedia_read`, `fetch_webpage` | `references/research.md` |
+| Read, review or cite a local file (PDF, DOCX, Markdown, ...; path or `file://`), or a downloaded PDF | `crepe-reader` | `open_document`, `read_section` / `search_document` / `read_pages`, `list_assets`, `get_asset`, `list_changes` (DOCX), `render_page_image`, `document_to_markdown` | `references/reader.md` |
 | Excel workbook | `crepe-spreadsheets` | `create_excel`, `update_excel_sheet`, `inspect_excel`, `markdown_table_to_excel` | `references/spreadsheets.md` |
 
 ## Rules

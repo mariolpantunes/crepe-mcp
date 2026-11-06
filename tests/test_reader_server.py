@@ -104,6 +104,10 @@ class TestPdf(ReaderTestCase):
         super().setUp()
         self.pdf = str(build_fixture("ieee_single", self.tmp_path))
 
+    def test_open_document_accepts_a_file_url(self):
+        info = data("open_document", path=Path(self.pdf).as_uri())
+        self.assertEqual(info["format"], data("open_document", path=self.pdf)["format"])
+
     def test_open_document_reports_parts_and_outline(self):
         info = data("open_document", path=self.pdf)
         self.assertEqual(info["format"], "pdf")

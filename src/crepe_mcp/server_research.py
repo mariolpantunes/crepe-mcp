@@ -30,7 +30,8 @@ CREPE Research Engine Guidelines:
 1. Use academic_search (Semantic Scholar) or arxiv_search for peer-reviewed papers and preprints.
 2. Use web_search for current web data and news (requires CREPE_TAVILY_API_KEY).
 3. Use wikipedia_search followed by wikipedia_read to extract background knowledge.
-4. Use fetch_webpage to extract full article text from specific URLs.
+4. Use fetch_webpage to extract full article text from http(s) web pages (HTML). It cannot read PDFs or local files:
+   local files, file:// URLs and downloaded PDFs are read with the crepe-reader tools (open_document).
 """
 
 mcp = FastMCP("crepe-research", instructions=RESEARCH_INSTRUCTIONS, lifespan=research.browser_lifespan)
@@ -87,7 +88,8 @@ def wikipedia_read(title: str, max_chars: int = 15000) -> dict:
 
 @mcp.tool
 async def fetch_webpage(url: str, max_chars: int = 15000) -> dict:
-    """Extract readable plain text from a URL (http/https only). Uses the
+    """Extract readable plain text from an http/https HTML web page. Not for local
+    files or PDFs: those go to crepe-reader open_document. Uses the
     shared Playwright browser (system Chromium at CREPE_HEADLESS_BROWSER_PATH)
     when available, so JS-rendered pages are fully loaded. Falls back to
     urllib + HTML stripping with a warning when no browser is configured."""

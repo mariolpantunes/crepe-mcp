@@ -41,7 +41,8 @@ from crepe_mcp.runner import run_server
 
 READER_INSTRUCTIONS = """\
 CREPE Reader Engine Guidelines:
-1. Every tool takes 'path', the absolute path of the document. Page numbers are the document's own (PDF pages;
+1. Every tool takes 'path', the absolute path (or file:// URL) of a local document; web URLs are not read.
+   Page numbers are the document's own (PDF pages;
    for formats without pages, logical pages of about 3,500 characters).
 2. Call open_document first: title, parts, outline with pages, numbered-item counts.
 3. read_pages reads whole pages in order (about 12,000 characters per call): continue with the next cursor until it

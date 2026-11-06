@@ -89,6 +89,18 @@ class SkillTests(unittest.TestCase):
         self.assertLessEqual(len(fields.get("compatibility", "")), 500)
         self.assertLess(len(body.splitlines()), 80)
 
+    def test_local_files_are_routed_to_the_reader(self):
+        """The skill sends local files and PDFs to open_document and keeps fetch_webpage to HTML pages."""
+        steps = SKILL.read_text().split("## Steps")[1].split("## Tasks")[0]
+        for text in (steps, (self.SKILL_DIR / "references" / "reader.md").read_text()):
+            self.assertIn("open_document", text)
+            self.assertIn("file://", text)
+            self.assertIn("fetch_webpage", text)
+        self.assertRegex(steps, r"fetch_webpage.{0,40}HTML")
+        research = (self.SKILL_DIR / "references" / "research.md").read_text()
+        self.assertRegex(research, r"HTML pages only")
+        self.assertIn("open_document", research)
+
     def test_lists_every_sub_server(self):
         setup = load_setup()
         text = SKILL.read_text()

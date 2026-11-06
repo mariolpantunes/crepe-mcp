@@ -317,13 +317,13 @@ async def fetch_webpage(url: str, max_chars: int = 15000) -> dict:
     """
     scheme = urllib.parse.urlsplit(url).scheme.lower()
     if scheme not in ("http", "https"):
-        return {
-            "content": "",
-            "error": (
-                f"Unsupported URL scheme {scheme!r}; only http:// and https:// "
-                "are allowed (e.g. file:// would disclose local files)."
-            ),
-        }
+        hint = (
+            "This is a local file: do not use fetch_webpage. Call the crepe-reader tool open_document with the "
+            "absolute path of the file (PDF, DOCX, Markdown, ...), then read_section, search_document or read_pages."
+            if scheme == "file" or not scheme
+            else f"Unsupported URL scheme {scheme!r}."
+        )
+        return {"content": "", "error": f"{hint} fetch_webpage reads only http:// and https:// web pages."}
 
     browser = await _ensure_browser()
     if browser is not None:

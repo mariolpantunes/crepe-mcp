@@ -8,7 +8,7 @@ Read when: finding papers, web pages or background knowledge (server `crepe-rese
 | Preprints (CS, physics, math, AI) | `arxiv_search(query, limit=5)` | No key. |
 | Current web data and news | `web_search(query, max_results=5)` | Tavily. Needs `CREPE_TAVILY_API_KEY`. |
 | Background on a topic | `wikipedia_search(query, limit=3)`, then `wikipedia_read(title, max_chars=15000)` | Search first, read the exact title. |
-| Full text of a known URL | `fetch_webpage(url, max_chars=15000)` | http/https only. Chromium renders JavaScript pages; without a browser it falls back to plain HTML stripping and says so in a warning. |
+| Full text of a known web page | `fetch_webpage(url, max_chars=15000)` | http/https HTML pages only. Not for local files, `file://` or PDFs: use `crepe-reader` `open_document` (see `references/reader.md`). Chromium renders JavaScript pages; without a browser it falls back to plain HTML stripping and says so in a warning. |
 
 ## Rules
 

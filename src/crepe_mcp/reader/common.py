@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+import urllib.parse
+import urllib.request
 from pathlib import Path
 
 #: Formats read through pandoc's AST; PDF has its own extractor.
@@ -41,13 +43,30 @@ def page_span(first: int, last: int) -> str:
     return str(first) if first == last else f"{first}-{last}"
 
 
+def _local_path(text: str) -> str:
+    """A plain path, from a plain path or a file:// URL; other URLs are refused with the tool to use instead."""
+    parts = urllib.parse.urlsplit(text)
+    scheme = parts.scheme.lower()
+    if scheme == "file":
+        if parts.netloc not in ("", "localhost"):
+            raise ReaderError(f"Only local file:// URLs are read, got host {parts.netloc!r}.")
+        return urllib.request.url2pathname(parts.path)
+    if scheme in ("http", "https"):
+        raise ReaderError(
+            "crepe-reader reads local files only, not web URLs. Download the file first (for example "
+            f"`curl -L -o /tmp/doc.pdf URL`) and pass its absolute path; for the text of an HTML page use "
+            f"crepe-research fetch_webpage. Got {text[:120]!r}."
+        )
+    return text
+
+
 def resolve_path(path: str, extra: tuple[str, ...] = ()) -> Path:
-    """The document named by the agent: an absolute path to a supported, readable file.
+    """The document named by the agent: an absolute path (or file:// URL) to a supported, readable file.
 
     When CREPE_READER_ROOTS lists folders (separated like PATH), the file must be inside one of them. `extra` adds
     file suffixes that are accepted besides the document formats (figure files for render_page_image).
     """
-    given = Path(path.strip()).expanduser()
+    given = Path(_local_path(path.strip())).expanduser()
     if not given.is_absolute():
         raise ReaderError(f"Pass the absolute path of the document, got {path[:120]!r}.")
     resolved = given.resolve()

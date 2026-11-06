@@ -2,7 +2,7 @@ Read when: the user gives you an existing file to read, summarise, review, cite 
 
 # Reader
 
-Reads PDF, DOCX, ODT, RTF, EPUB, HTML, LaTeX, reStructuredText, Markdown, Org, Jupyter, PPTX, XLSX and CSV without any model: the file is read once into pages, sections, paragraphs and numbered items, and each tool returns a small piece. Every tool takes `path`, the **absolute** path of the file.
+Reads PDF, DOCX, ODT, RTF, EPUB, HTML, LaTeX, reStructuredText, Markdown, Org, Jupyter, PPTX, XLSX and CSV without any model: the file is read once into pages, sections, paragraphs and numbered items, and each tool returns a small piece. Every tool takes `path`, the **absolute** path of the file (a `file://` URL is accepted too). This is the tool for every local PDF, never `pdftotext` or `fetch_webpage`. Web URLs are not read: for a PDF at a URL, `curl -L -o /tmp/doc.pdf URL` and pass that path; for an HTML page use `fetch_webpage`.
 
 ```
 open_document(path)                         -> title, format, pages, parts, outline, numbered-item counts, warnings
